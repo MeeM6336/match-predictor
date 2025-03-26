@@ -14,7 +14,14 @@ load_dotenv()
 
 def insert_match_info(cursor, df):
     query = "INSERT INTO matches (date, tournament, map, team_a, team_b, rounds_team_a, rounds_team_b) VALUES (%s, %s, %s, %s, %s, %s, %s)"
-    val = (df["dateTime"], df["tournamentName"], df["mapName"], df["teamNameA"], df["teamNameB"], df["teamScoreA"], df["teamScoreB"])
+    val = (df["dateTime"].iloc[0], 
+           df["tournamentName"].iloc[0], 
+           df["mapName"].iloc[0], 
+           df["teamNameA"].iloc[0], 
+           df["teamNameB"].iloc[0], 
+           df["teamScoreA"].iloc[0], 
+           df["teamScoreB"].iloc[0])
+
     cursor.execute(query, val)
     pk = cursor.lastrowid
     
@@ -23,7 +30,14 @@ def insert_match_info(cursor, df):
 
 def insert_match_statistics(cursor, pk, df):
     query = "INSERT INTO team_stat (team_name, match_id, team_rating, first_kills, clutches_won, avg_kda, avg_kast, avg_adr) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)"
-    val = (df["team_name"], pk, df["rating"], df["fk"], df["clutches"], ((df["K"] + df["A"])/(df["D"])), df["KAST"], df["ADR"])
+    val = (df["team_name"].iloc[0], 
+    pk, 
+    df["rating"].iloc[0], 
+    df["fk"].iloc[0], 
+    df["clutches"].iloc[0], 
+    ((df["K"].iloc[0] + df["A"].iloc[0])/(df["D"].iloc[0])), 
+    df["KAST"].iloc[0], 
+    df["ADR"].iloc[0])
     cursor.execute(query, val)
 
 
@@ -175,11 +189,76 @@ def extractTeamStats(soup):
 
 
 def main():
-    mydb = mysql.connector.connect(
-    host=os.getenv("DB_HOST"),
-    user=os.getenv("DB_USER"),
-    password=os.getenv("DB_PASSWORD"),
-    database=os.getenv("DB_NAME")
-    )
+    try:
+        mydb = mysql.connector.connect(
+            host=os.getenv("DB_HOST"),
+            user=os.getenv("DB_USER"),
+            password=os.getenv("DB_PASSWORD"),
+            database=os.getenv("DB_NAME")
+        )
+        cursor = mydb.cursor()
+    
+    except mysql.connector.Error as e:
+        print("Database connection error:", e)
+        return
 
-    cursor = mydb.cursor()
+    driver = Driver(uc=True, headless=True)
+    dateNow, dateAgo = getDates()
+    teams = loadTeams()
+
+    try:
+        for team_id, team_name in teams.items():
+            url = f"https://www.hltv.org/stats/teams/matches/{team_id}/{team_name}?csVersion=CS2&startDate={dateAgo}&endDate={dateNow}&matchType=BigEvents&rankingFilter=Top30"
+            driver.get(url)
+            print("Scraping data for team:", team_name)
+
+            try:
+                soup = BeautifulSoup(driver.page_source, "html.parser")
+                matchTable = soup.select("table.stats-table")
+
+                if not matchTable:
+                    print(f"No match table found for {team_name}")
+                    continue
+                
+                matchLinks = [l.get("href") for l in matchTable[0].find_all('a') if "/stats/matches" in l.get("href", "")]
+                matchUrls = [f"https://www.hltv.org{l}" for l in matchLinks]
+
+                for url in matchUrls:
+                    try:
+                        driver.get(url)
+                        time.sleep(random.uniform(2,5))
+
+                        soup = BeautifulSoup(driver.page_source, "html.parser")
+
+                        matchInfo = extractMatchInfo(soup)
+                        teamStatA, teamStatB = extractTeamStats(soup)
+
+                        if matchInfo.empty or teamStatA.empty or teamStatB.empty:
+                            print("Skipping match due to missing data:", url)
+                            continue
+
+                        try:
+                            pk = insert_match_info(cursor, matchInfo)
+                            insert_match_statistics(cursor, pk, teamStatA)
+                            insert_match_statistics(cursor, pk, teamStatB)
+
+                            mydb.commit()  # Commit only after all inserts succeed
+                    
+                        except mysql.connector.Error as e:
+                            mydb.rollback()  # Rollback if any SQL error occurs
+                            print("Error inserting info:", e)
+
+                    except Exception as e:
+                        print(f"Error processing match {url}: {e}")
+                        continue
+
+            except Exception as e:
+                print("Error reading table data:", e)
+
+    finally:
+        driver.quit()  # Ensures the driver is closed
+        cursor.close()
+        mydb.close()
+
+if __name__ == "__main__":
+    main()
