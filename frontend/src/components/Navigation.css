@@ -1,17 +1,49 @@
 .Navigation {
-
+    display: flex;
+    flex-direction: column;
+    min-width: 15%;
+    background-color: rgb(39, 39, 39);
+    min-height: 100vh;
 }
 
-.nav-links-container {
-    
-    padding-left: 1rem;
+.nav-overview-container {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 1rem;
+}
+
+.nav-overview-container img {
+    width: 2rem;
+}
+
+.nav-overview-container p {
+    font-size: 2rem;
+    color: white;
 }
 
 .nav-links {
     list-style: none;
 }
 
-.nav-links button {
-    
+.nav-links-button {
+    display: flex;
+    border: none;
+    width: 100%;
+    height: 3rem;
+    justify-content: left;
+    align-items: center;
+    background-color: transparent;
+    padding-left: 4rem;
+    gap: 0.5rem;
+    color: white;
+}
+
+.nav-links-button img {
+    width: 1rem;
+}
+
+.nav-links-button:hover {
+    filter: brightness(0) saturate(100%) invert(55%) sepia(60%) saturate(500%) hue-rotate(0deg) brightness(110%) contrast(117%);
 }
 

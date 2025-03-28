@@ -19,8 +19,8 @@ def insert_match_info(cursor, df):
            df["mapName"].iloc[0], 
            df["teamNameA"].iloc[0], 
            df["teamNameB"].iloc[0], 
-           df["teamScoreA"].iloc[0], 
-           df["teamScoreB"].iloc[0])
+           int(df["teamScoreA"].iloc[0]), 
+           int(df["teamScoreB"].iloc[0]))
 
     cursor.execute(query, val)
     pk = cursor.lastrowid
@@ -29,28 +29,28 @@ def insert_match_info(cursor, df):
 
 
 def insert_match_statistics(cursor, pk, df):
-    query = "INSERT INTO team_stat (team_name, match_id, team_rating, first_kills, clutches_won, avg_kda, avg_kast, avg_adr) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)"
+    query = "INSERT INTO team_stats (team_name, match_id, team_rating, first_kills, clutches_won, avg_kda, avg_kast, avg_adr) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)"
     val = (df["team_name"].iloc[0], 
     pk, 
-    df["rating"].iloc[0], 
-    df["fk"].iloc[0], 
-    df["clutches"].iloc[0], 
-    ((df["K"].iloc[0] + df["A"].iloc[0])/(df["D"].iloc[0])), 
-    df["KAST"].iloc[0], 
-    df["ADR"].iloc[0])
+    float(df["rating"].iloc[0]), 
+    int(df["fk"].iloc[0]), 
+    int(df["clutches"].iloc[0]), 
+    float(((df["K"].iloc[0] + df["A"].iloc[0])/(df["D"].iloc[0]))), 
+    float(df["KAST"].iloc[0]), 
+    float(df["ADR"].iloc[0]))
     cursor.execute(query, val)
 
 
 def getDates():
     dateNow = datetime.now().strftime('%Y-%m-%d')
-    dateAgo = (datetime.now() - timedelta(days=7)).strftime('%Y-%m-%d')
+    dateAgo = (datetime.now() - timedelta(days=90)).strftime('%Y-%m-%d')
 
     return (dateNow, dateAgo)
 
 
 def loadTeams():
     try:
-        with open("src/assets/data/1teams.json") as f:
+        with open("assets/data/teams.json") as f:
             print("File opened successfully")
             return json.load(f)
             
@@ -210,7 +210,7 @@ def main():
         for team_id, team_name in teams.items():
             url = f"https://www.hltv.org/stats/teams/matches/{team_id}/{team_name}?csVersion=CS2&startDate={dateAgo}&endDate={dateNow}&matchType=BigEvents&rankingFilter=Top30"
             driver.get(url)
-            print("Scraping data for team:", team_name)
+            print("Scraping data for team:", team_name, "from date range (", dateAgo, "-", dateNow, ")")
 
             try:
                 soup = BeautifulSoup(driver.page_source, "html.parser")
@@ -242,10 +242,10 @@ def main():
                             insert_match_statistics(cursor, pk, teamStatA)
                             insert_match_statistics(cursor, pk, teamStatB)
 
-                            mydb.commit()  # Commit only after all inserts succeed
+                            mydb.commit()
                     
                         except mysql.connector.Error as e:
-                            mydb.rollback()  # Rollback if any SQL error occurs
+                            mydb.rollback()
                             print("Error inserting info:", e)
 
                     except Exception as e:
@@ -256,7 +256,7 @@ def main():
                 print("Error reading table data:", e)
 
     finally:
-        driver.quit()  # Ensures the driver is closed
+        driver.quit()
         cursor.close()
         mydb.close()
 
