@@ -1,7 +1,14 @@
+# Node.js
+node_modules/
+npm-debug.log*
+package-lock.json
+
+# Python
 venv/
 .venv/
-.ipynb_checkpoints/
+backend/ml_model/__pycache__/
+
+# dotenv
 .env
-backend/ml_model/__pycache__/logisticRegression.cpython-312.pyc
-.gitignore
+
 .gitignore

@@ -16,13 +16,14 @@ from dotenv import load_dotenv
 load_dotenv()
 
 def insert_team_stats(cursor, list_stats): # Given a list of map stats for a particular team
-    for stats in list_stats:
         query = "INSERT into map_stats (team_name, map_name, wins, losses) VALUES (%s, %s, %s, %s)"
-        val = (stats["team_name"],
+        values = [(stats["team_name"],
                stats["map_name"],
                int(stats["wins"]),
-               int(stats["losses"]))
-        cursor.execute(query, val)
+               int(stats["losses"])) for stats in list_stats]
+        cursor.executemany(query, values)
+
+    
 
 
 def insert_match_info(cursor, df):
@@ -226,6 +227,58 @@ def extract_team_map_stats(soup):
         return []
 
 
+def scrape_team_data(driver, cursor, mydb, team_id, team_name, date_ago, date_now):
+    print(f"Scraping data for team: {team_name}")
+
+    try:
+        url = f"https://www.hltv.org/stats/teams/maps/{team_id}/{team_name}?startDate={date_ago}&endDate={date_now}&rankingFilter=Top50"
+        driver.get(url)
+        soup = BeautifulSoup(driver.page_source, "html.parser")
+        map_team_stats = extract_team_map_stats(soup)
+        insert_team_stats(cursor, map_team_stats)
+        mydb.commit()
+    except Exception as e:
+        mydb.rollback()
+        print(f"Map stats error for {team_name}: {e}")
+
+    try:
+        url = f"https://www.hltv.org/stats/teams/matches/{team_id}/{team_name}?csVersion=CS2&startDate={date_ago}&endDate={date_now}&rankingFilter=Top50"
+        driver.get(url)
+        soup = BeautifulSoup(driver.page_source, "html.parser")
+        match_table = soup.select("table.stats-table")
+
+        if not match_table:
+            print(f"No match table found for {team_name}")
+            return
+
+        match_links = [l.get("href") for l in match_table[0].find_all('a') if "/stats/matches" in l.get("href", "")]
+        match_urls = [f"https://www.hltv.org{l}" for l in match_links]
+
+        for match_url in match_urls:
+            try:
+                driver.get(match_url)
+                time.sleep(random.uniform(2, 5))
+
+                soup = BeautifulSoup(driver.page_source, "html.parser")
+                match_info = extract_match_info(soup)
+                team_stat_A, team_stat_B = extract_team_stats(soup)
+
+                if match_info.empty or team_stat_A.empty or team_stat_B.empty:
+                    print("Skipping match due to missing data:", match_url)
+                    continue
+
+                pk = insert_match_info(cursor, match_info)
+                insert_match_statistics(cursor, pk, team_stat_A)
+                insert_match_statistics(cursor, pk, team_stat_B)
+                mydb.commit()
+
+            except Exception as e:
+                mydb.rollback()
+                print(f"Error processing match {match_url}: {e}")
+
+    except Exception as e:
+        print(f"Error retrieving match list for {team_name}: {e}")
+
 def main():
     try:
         mydb = mysql.connector.connect(
@@ -246,74 +299,12 @@ def main():
 
     try:
         for team_id, team_name in teams.items():
-            url = f"https://www.hltv.org/stats/teams/maps/{team_id}/{team_name}?startDate={date_ago}&endDate={date_now}&rankingFilter=Top50"
-            driver.get(url)
-            print("Scraping data for team:", team_name, "from date range (", date_ago, "-", date_now, ")")
-
-            try:
-                soup = BeautifulSoup(driver.page_source, "html.parser")
-                map_team_stats = extract_team_map_stats(soup)
-
-                try:
-                    insert_team_stats(cursor, map_team_stats)
-                    mydb.commit()
-                except mysql.connector.Error as e:
-                    mydb.rollback()
-                    print("Error inserting info:", e)
-
-            except Exception as e:
-                print("Error:", e)
-
-            url = f"https://www.hltv.org/stats/teams/matches/{team_id}/{team_name}?csVersion=CS2&startDate={date_ago}&endDate={date_now}&rankingFilter=Top50"
-            driver.get(url)
-
-            try:
-                soup = BeautifulSoup(driver.page_source, "html.parser")
-                match_table = soup.select("table.stats-table")
-
-                if not match_table:
-                    print(f"No match table found for {team_name}")
-                    continue
-                
-                match_links = [l.get("href") for l in match_table[0].find_all('a') if "/stats/matches" in l.get("href", "")]
-                match_urls = [f"https://www.hltv.org{l}" for l in match_links]
-
-                for url in match_urls:
-                    try:
-                        driver.get(url)
-                        time.sleep(random.uniform(2,5))
-
-                        soup = BeautifulSoup(driver.page_source, "html.parser")
-
-                        match_info = extract_match_info(soup)
-                        team_stat_A, team_stat_B = extract_team_stats(soup)
-
-                        if match_info.empty or team_stat_A.empty or team_stat_B.empty:
-                            print("Skipping match due to missing data:", url)
-                            continue
-
-                        try:
-                            pk = insert_match_info(cursor, match_info)
-                            insert_match_statistics(cursor, pk, team_stat_A)
-                            insert_match_statistics(cursor, pk, team_stat_B)
-
-                            mydb.commit()
-                    
-                        except mysql.connector.Error as e:
-                            mydb.rollback()
-                            print("Error inserting info:", e)
-
-                    except Exception as e:
-                        print(f"Error processing match {url}: {e}")
-                        continue
-
-            except Exception as e:
-                print("Error reading table data:", e)
-
+            scrape_team_data(driver, cursor, mydb, team_id, team_name, date_ago, date_now)
     finally:
         driver.quit()
         cursor.close()
         mydb.close()
+
 
 if __name__ == "__main__":
     main()
