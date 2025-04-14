@@ -7,6 +7,9 @@ package-lock.json
 venv/
 .venv/
 backend/ml_model/__pycache__/
+backend/scraper/downloaded_files
+backend/ml_model/lr_model_data
+backend/ml_model/encoder
 
 # dotenv
 .env

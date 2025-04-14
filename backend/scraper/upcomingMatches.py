@@ -1,7 +1,6 @@
 from seleniumbase import Driver
 from bs4 import BeautifulSoup
 import mysql.connector
-import time
 import os
 from datetime import datetime
 from bs4 import BeautifulSoup
@@ -26,7 +25,7 @@ def insert_upcoming(soup, cursor):
             team_b = team_names[1].text.strip()
 
         else:
-            print("Insufficient data. Aborting insert since")
+            print("Insufficient data. Aborting insert.")
             return
 
         query = "INSERT INTO upcoming_matches (team_a, team_b, date, tournament_name) Values (%s, %s, %s, %s)"
@@ -69,21 +68,21 @@ def main():
             time_button = driver.find_element("css selector", "div.matches-sort-by-toggle-time")
             time_button.click()
 
-            days = driver.find_elements("css selector", "div.matches-list-section")
-            for day in days[:1]:
-                matches = day.find_elements("css selector", "div.match")
+            day = driver.find_element("css selector", "div.matches-list-section")
+            
+            matches = day.find_elements("css selector", "div.match")
 
-                for match in matches:
-                    table_html = match.get_attribute("outerHTML")
-                    soup = BeautifulSoup(table_html, 'html.parser')
+            for match in matches:
+                table_html = match.get_attribute("outerHTML")
+                soup = BeautifulSoup(table_html, 'html.parser')
 
-                    try:
-                        insert_upcoming(soup, cursor)
-                        mydb.commit()
+                try:
+                    insert_upcoming(soup, cursor)
+                    mydb.commit()
 
-                    except mysql.connector.Error as e:
-                        mydb.rollback()
-                        print("Error inserting info:", e)
+                except mysql.connector.Error as e:
+                    mydb.rollback()
+                    print("Error inserting info:", e)
 
         except Exception as e:
             print("Error", e)
