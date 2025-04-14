@@ -93,12 +93,14 @@ def predict_match(model):
             except Exception as e:
                 print("Error:", e)
 
-        prediction = model.predict([match_stat])[0]
-        df_matches.at[i, "outcome"] = prediction
+        proba = model.predict_proba([match_stat])[0]
+        prediction = int(proba[1] >= 0.5)
+        confidence = proba[prediction]
 
         query = f"""
         UPDATE upcoming_matches 
-            SET outcome = %s
+            SET outcome = %s, 
+            confidence = %s 
         WHERE 
             team_a = %s AND
             team_b = %s AND
@@ -108,6 +110,7 @@ def predict_match(model):
         try:
             cursor.execute(query, (
                 int(prediction),
+                float(confidence),
                 match_row.team_a,
                 match_row.team_b,
                 match_row.date,
