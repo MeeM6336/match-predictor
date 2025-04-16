@@ -31,8 +31,12 @@ const Home = () => {
 							<p>Recent Predictions</p>
 							{upcomingMatchList.map((match, index) => (
 								<div className='prediction' key={index}>
+									
 									<p>{match.team_a}</p>
 									<p>{match.team_b}</p>
+									<p>{match.tournament_name}</p>
+									<p>{match.outcome ? match.outcome : "Not Available"}</p>
+									<p>{match.confidence ? match.confidence : 0}</p>
 								</div>
 							))}
 						</div>
