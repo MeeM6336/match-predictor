@@ -16,3 +16,14 @@ def get_dates():
     date_ago = (datetime.now() - timedelta(days=150)).strftime('%Y-%m-%d')
 
     return (date_now, date_ago)
+
+def cookie_Accept(driver):
+    try:
+        accept_button = driver.find_element("#CybotCookiebotDialogBodyLevelButtonLevelOptinAllowAll")
+        accept_button.click()
+
+        time_button = driver.find_element("css selector", "div.matches-sort-by-toggle-time")
+        time_button.click()
+    except Exception as e:
+        print("Error accepting cookies:", e)
+        

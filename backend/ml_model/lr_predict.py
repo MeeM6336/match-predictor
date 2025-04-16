@@ -40,13 +40,11 @@ def predict_match(model):
             encoded_team_a = team_encoder.transform([match_row.team_a])[0]
         except:
             encoded_team_a = -1
-            print("Team A not found:", match_row.team_a)
         
         try:
             encoded_team_b = team_encoder.transform([match_row.team_b])[0]
         except:
             encoded_team_b = -1
-            print("Team B not found:", match_row.team_b)
         
         # Checks teams validity
         if encoded_team_a == -1 or encoded_team_b == -1:

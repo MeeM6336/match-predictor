@@ -50,6 +50,8 @@ def parse_results(soup):
                 cleaned_date = re.sub(r"Results for\s+", "", date)
                 cleaned_date = re.sub(r'(\d{1,2})(st|nd|rd|th)', r'\1', cleaned_date)
                 match_date = datetime.strptime(cleaned_date, "%B %d %Y")
+            else:
+                continue
 
             results = result_day.find_all("div", class_="result")
             for result in results:
@@ -59,21 +61,29 @@ def parse_results(soup):
                 tournament = result.find("span", class_="event-name")
                 if tournament is not None:
                     data["tournament_name"] = tournament.text.strip()
+                else:
+                    continue
 
                 team_names = result.find_all("div", class_="team")
                 if len(team_names) >= 2:
                     data["team_a"] = team_names[0].text.strip()
                     data["team_b"] = team_names[1].text.strip()
+                else:
+                    continue
 
                 team_won = result.find("div", class_="team-won").text.strip()
 
                 score_won = result.find("span", class_="score-won")
                 if score_won is not None:
                     score_won = score_won.text.strip()
+                else:
+                    continue
 
                 score_lost = result.find("span", class_="score-lost")
                 if score_lost is not None:
                     score_lost = score_lost.text.strip()
+                else:
+                    continue
                 
                 if score_won and score_lost and team_won:
                     if team_won == team_names[0].text.strip():
