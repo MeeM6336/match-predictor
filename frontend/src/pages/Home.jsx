@@ -1,21 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import Navigation from '../components/Navigation';
-import { fetchUpcomingMatches } from '../assets/util/matches';
+import RecentPredictions from '../components/RecentPredictions';
 import './Home.css'
 
 const Home = () => {
-
-	const [upcomingMatchList, setUpcomingMatchList] = useState([])
-
-	useEffect(() => {
-		const loadMatches = async () => {
-			const matches = await fetchUpcomingMatches()
-			setUpcomingMatchList(matches)
-		}
-
-		loadMatches()
-	}, []);
-
 
 	return (
 		<div className='Home'>
@@ -27,19 +15,7 @@ const Home = () => {
 						<p className='home-header-subtitle'>Model Ver 0.00</p>
 					</div>
 					<div className='home-body-container'>
-						<div className='home-recent-predictions'>
-							<p>Recent Predictions</p>
-							{upcomingMatchList.map((match, index) => (
-								<div className='prediction' key={index}>
-									
-									<p>{match.team_a}</p>
-									<p>{match.team_b}</p>
-									<p>{match.tournament_name}</p>
-									<p>{match.outcome ? match.outcome : "Not Available"}</p>
-									<p>{match.confidence ? match.confidence : 0}</p>
-								</div>
-							))}
-						</div>
+						<RecentPredictions/>
 						<div className='home-model-performance'>
 							<p>Model Performance</p>
 						</div>

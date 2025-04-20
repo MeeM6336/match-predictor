@@ -1,0 +1,85 @@
+.RecentPredictions {
+    min-width: 50%;
+    background-color: rgb(243, 243, 243);
+    max-height: 44vh;
+    box-shadow: 0px 0px 7px rgb(204,204,204);
+}
+
+.prediction-table-container {
+    overflow-y: scroll;
+    max-height: 40vh;
+}
+
+.prediction-header {
+    display: flex;
+    justify-content: space-between;
+    position: sticky;
+    top: 0;
+    background-color: rgb(255, 255, 255);
+    font-size: 1;
+    padding-left: 1rem;
+    padding-right: 1rem;
+    padding-top: 0.5rem;
+    padding-bottom: 0.5rem;
+}
+
+.prediction-header a {
+    text-decoration: none;
+    color: black;
+    transition: all 300ms ease;
+}
+
+.prediction-header a:hover {
+    color: red;
+}
+
+.prediction-table {
+    border-collapse: collapse;
+    table-layout: fixed;
+    width: 100%;
+}
+
+.prediction-table-header {
+    font-size: 0.6rem;
+    position: sticky;
+    top: 0;
+    background-color: white;
+}
+
+.prediction-table-team {
+    width: 12.5%;
+}
+
+.prediction-table-tournament {
+    width: 35%;
+}
+
+.prediction-table-date {
+    width: 10%;
+}
+
+.prediction-table-con {
+    width: 5%;
+}
+
+.prediction-table-outcome {
+    width: 12.5%;
+}
+
+.prediction-table-actoutcome {
+    width: 12.5%;
+}
+
+.prediction-table-body td{
+    text-align: center;
+    font-size: 0.65rem;
+    padding: 0.5rem;
+}
+
+.winner {
+    background-color: rgb(180, 233, 178);
+}
+
+.loser {
+    background-color: rgb(255, 147, 147);
+}

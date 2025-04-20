@@ -6,7 +6,7 @@
 .home-container {
     display: flex;
     flex-direction: column;
-    min-width: 82vw;
+    min-width: 85vw;
 }
 
 .home-header-container {
@@ -15,7 +15,7 @@
     justify-content: center;
     padding-left: 4rem;
     padding-right: 4rem;
-    min-height: 20vh;
+    min-height: 16vh;
 }
 
 .home-header-title {
@@ -31,15 +31,10 @@
 .home-body-container {
     display: grid;
     grid-template-columns: repeat(2, 1fr);
-    gap: 3rem;
-    padding-left: 4rem;
-    padding-right: 4rem;
+    gap: 1rem;
+    padding-left: 2rem;
+    padding-right: 2rem;
     min-height: 75vh;
-}
-
-.home-recent-predictions {
-    min-width: 50%;
-    background-color: rgb(231, 231, 231);
 }
 
 .home-model-performance {
@@ -50,10 +45,4 @@
 .home-dataset-info {
     grid-column: span 2;
     background-color: rgb(231, 231, 231);
-}
-
-.prediction {
-    display: flex;
-    flex-direction: row;
-    gap: 2rem;
 }

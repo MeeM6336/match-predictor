@@ -28,23 +28,45 @@ db.connect((err) => {
 });
 
 // Inserts today's matches into DB
-cron.schedule('0 2 * * *', () => {
-  const python = spawn('python3', ['scraper/upcomingMatches.py'])
+cron.schedule('0 1 * * *', () => {
+  const um_python = spawn('python3', ['scraper/upcomingMatches.py'])
 
-  python.stderr.on('data', (data) => {
+  um_python.stderr.on('data', (data) => {
     console.error(`Python stderr: ${data}`);
   });
 
-  python.on('close', (code) => {
+  um_python.on('close', (code) => {
     console.log(`Python script (upcomingMatches) exited with code ${code}`);
+
+    const lrp_python = spawn('python3', ['ml_model/lr_predict.py'])
+
+    lrp_python.stderr.on('data', (data) => {
+      console.error(`Python stderr: ${data}`);
+    });
+
+    lrp_python.on('close', (code) => {
+      console.log(`Python script (lr_predict) exited with code ${code}`);
+    });
   });
-})
+});
+
+cron.schedule('0 23 * * *', () => {
+  const results_python = spawn('python3', ['scraper/matchOutcome.py'])
+
+  results_python.stderr.on('data', (data) => {
+    console.error(`Python stderr: ${data}`);
+  });
+
+  lrp_python.on('close', (code) => {
+    console.log(`Python script (matchOutcome) exited with code ${code}`);
+  });
+});
 
 app.get('/evaluate_model')
 
 // Route to get recent matches
 app.get('/upcoming', (req, res) => {
-  const query = 'SELECT * FROM upcoming_matches'
+  const query = 'SELECT * FROM upcoming_matches ORDER BY date DESC'
   db.query(query, (err, result) => {
     if (err) {
       console.error(err);
