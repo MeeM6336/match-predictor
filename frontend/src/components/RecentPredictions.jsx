@@ -18,7 +18,6 @@ const RecentPredictions = () => {
 			hour12: false,
 		});
 
-		console.log(localString)
 		return localString
 	};
 

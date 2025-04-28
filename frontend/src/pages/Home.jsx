@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import Navigation from '../components/Navigation';
 import RecentPredictions from '../components/RecentPredictions';
+import ModelPerformance from '../components/ModelPerformance';
 import './Home.css'
 
 const Home = () => {
@@ -16,9 +17,7 @@ const Home = () => {
 					</div>
 					<div className='home-body-container'>
 						<RecentPredictions/>
-						<div className='home-model-performance'>
-							<p>Model Performance</p>
-						</div>
+						<ModelPerformance/>
 						<div className='home-dataset-info'>
 							<p>Dataset Information</p>
 						</div>

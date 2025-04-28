@@ -7,12 +7,7 @@ from dotenv import load_dotenv
 from pathlib import Path
 from sklearn.preprocessing import LabelEncoder
 
-def getDateStamp():
-	date = datetime.datetime.now()
-	date_string = date.strftime('%m/%d/%Y').replace("/", "-")
-	return date_string
-
-def get_historical_matches():
+def db_connect():
 	try:
 		env_path = Path(__file__).resolve().parent.parent / '.env'
 		load_dotenv(env_path)
@@ -23,10 +18,28 @@ def get_historical_matches():
 			password=os.getenv("DB_PASSWORD"),
 			database=os.getenv("DB_NAME")
 		)
+	
+		return db
 
 	except mysql.connector.Error as e:
 		print("Database connection error:", e)
-		return None, None, None
+		return None
+
+
+def save_object(obj, path):
+	path = Path(path)
+	path.parent.mkdir(parents=True, exist_ok=True)
+	joblib.dump(obj, path)
+
+
+def getDateStamp():
+	date = datetime.datetime.now()
+	date_string = date.strftime('%m/%d/%Y').replace("/", "-")
+	return date_string
+
+
+def get_historical_matches():
+	db = db_connect()
 	
 	try:
 		df_matches = pd.read_sql_query("SELECT * FROM MATCHES", db)
@@ -35,8 +48,8 @@ def get_historical_matches():
 		return df_matches, df_team_stats
 	
 	except Exception as e:
-		print("Error fetching DB:", e)
-		return None, None, None
+		print("Error fetching historical matches:", e)
+		return None, None
 
 
 def get_hth_wins(cursor, team_a, team_b):
@@ -63,34 +76,23 @@ def get_hth_wins(cursor, team_a, team_b):
 
 
 def process_matches(df_matches, df_team_stats):
-	try:
-		env_path = Path(__file__).resolve().parent.parent / '.env'
-		load_dotenv(env_path)
-
-		db = mysql.connector.connect(
-			host=os.getenv("DB_HOST"),
-			user=os.getenv("DB_USER"),
-			password=os.getenv("DB_PASSWORD"),
-			database=os.getenv("DB_NAME")
-		)
-
-	except mysql.connector.Error as e:
-		print("Database connection error:", e)
-		return []
+	db = db_connect()
 	
 	cursor = db.cursor()
 
 	print("Beginning to process matches...")
 
 	# Team name encoding
-	if os.path.exists("encoders/team_encoder.pkl"):
-		team_encoder = joblib.load("encoders/team_encoder.pkl")
+	encoder_path = Path(__file__).resolve().parent / 'encoders/team_encoder.pkl'
+
+	if os.path.exists(encoder_path):
+		team_encoder = joblib.load(encoder_path)
 
 	else:
 		all_teams = pd.concat([df_matches['team_a'], df_matches['team_b'], df_team_stats['team_name']]).unique()
 		team_encoder = LabelEncoder()
 		team_encoder.fit(all_teams)
-		joblib.dump(team_encoder, "encoders/team_encoder.pkl")
+		save_object(team_encoder, encoder_path)
 
 	team_stats_dict = {(row.match_id, row.team_name): row for row in df_team_stats.itertuples(index=False)}
 

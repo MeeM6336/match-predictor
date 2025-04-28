@@ -5,29 +5,18 @@ import mysql.connector
 from sklearn.linear_model import LogisticRegression
 from dotenv import load_dotenv
 from pathlib import Path
-from ml_util import get_hth_wins
+from ml_util import get_hth_wins, save_object, db_connect
 
 def predict_match(model):
     try:
-        team_encoder = joblib.load("encoders/team_encoder.pkl")
+        encoder_path = Path(__file__).resolve().parent / 'encoders/team_encoder.pkl'
+        team_encoder = joblib.load(encoder_path)
     
     except OSError as e:
         print("Error opening encoder:", e)
 
-    try:
-        env_path = Path(__file__).resolve().parent.parent / '.env'
-        load_dotenv(env_path)
-
-        db = mysql.connector.connect(
-            host=os.getenv("DB_HOST"),
-            user=os.getenv("DB_USER"),
-            password=os.getenv("DB_PASSWORD"),
-            database=os.getenv("DB_NAME")
-        )
-        cursor = db.cursor()
-
-    except mysql.connector.Error as e:
-        print("Database connection error:", e)
+    db = db_connect()
+    cursor = db.cursor()
     
     try:
         df_matches = pd.read_sql_query("SELECT * FROM upcoming_matches WHERE outcome IS NULL", db)
@@ -115,15 +104,20 @@ def predict_match(model):
                 match_row.tournament_name
             ))
             db.commit()
-
+            
         except mysql.connector.Error as e:
             db.rollback()
             print("Error inserting info:", e)
 
 
 def main():
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+    MODEL_PATH = os.path.join(BASE_DIR, "../ml_model/lr_model_data/lr_final_classifier_04-26-2025.pkl")
+
+    model = None
+
     try:
-        model = joblib.load("lr_model_data/lr_final_classifier_04-10-2025.pkl")
+        model = joblib.load(MODEL_PATH)
     
     except OSError as e:
         print("Error opening encoder:", e)

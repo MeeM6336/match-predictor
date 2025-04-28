@@ -188,7 +188,7 @@ def main():
         print("Database connection error:", e)
         return
 
-    driver = Driver(uc=True, page_load_strategy="eager", headless=False)
+    driver = Driver(uc=True, page_load_strategy="eager", headless=True)
     date_now, date_ago = get_dates()
     teams = load_teams()
 

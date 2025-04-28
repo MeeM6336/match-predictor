@@ -28,20 +28,28 @@ db.connect((err) => {
 });
 
 // Inserts today's matches into DB
-cron.schedule('0 1 * * *', () => {
-  const um_python = spawn('python3', ['scraper/upcomingMatches.py'])
+cron.schedule('0 23 * * *', () => {
+  const um_python = spawn('python', ['scraper/upcomingMatches.py'])
+
+  um_python.stdout.on('data', (data) => {
+    console.log(`Python stdout: ${data.toString()}`);
+  });
 
   um_python.stderr.on('data', (data) => {
-    console.error(`Python stderr: ${data}`);
+    console.error(`Python stderr: ${data.toString()}`);
   });
 
   um_python.on('close', (code) => {
     console.log(`Python script (upcomingMatches) exited with code ${code}`);
 
-    const lrp_python = spawn('python3', ['ml_model/lr_predict.py'])
+    const lrp_python = spawn('python', ['ml_model/lr_predict.py'])
+
+    lrp_python.stdout.on('data', (data) => {
+      console.log(`Python stdout: ${data.toString()}`);
+    });
 
     lrp_python.stderr.on('data', (data) => {
-      console.error(`Python stderr: ${data}`);
+      console.error(`Python stderr: ${data.toString()}`);
     });
 
     lrp_python.on('close', (code) => {
@@ -50,23 +58,52 @@ cron.schedule('0 1 * * *', () => {
   });
 });
 
-cron.schedule('0 23 * * *', () => {
-  const results_python = spawn('python3', ['scraper/matchOutcome.py'])
+cron.schedule('55 23 * * *', () => {
+  const results_python = spawn('python', ['scraper/matchOutcome.py'])
+
+  results_python.stdout.on('data', (data) => {
+    console.log(`Python stdout: ${data.toString()}`);
+  });
 
   results_python.stderr.on('data', (data) => {
     console.error(`Python stderr: ${data}`);
   });
 
-  lrp_python.on('close', (code) => {
+  results_python.on('close', (code) => {
     console.log(`Python script (matchOutcome) exited with code ${code}`);
   });
 });
 
-app.get('/evaluate_model')
+app.get('/metrics/:name/:date', (req, res) => {
+  const modelName = decodeURIComponent(req.params.name);
+  const modelDate = decodeURIComponent(req.params.date);
+  const query = 'SELECT * FROM model_metrics WHERE model_name = ? AND date = ?'
+  db.query(query, [modelName, modelDate], (err, result) => {
+    if (err){
+      console.log(err);
+      res.status(500).send("Server error");
+
+    } else {
+      res.json(result);
+    }
+  })
+})
 
 // Route to get recent matches
 app.get('/upcoming', (req, res) => {
   const query = 'SELECT * FROM upcoming_matches ORDER BY date DESC'
+  db.query(query, (err, result) => {
+    if (err) {
+      console.error(err);
+      res.status(500).send("Server error");
+    } else {
+      res.json(result);
+    }
+  });
+});
+
+app.get('/upcomingstats', (req, res) => {
+  const query = 'SELECT outcome, actual_outcome FROM upcoming_matches WHERE outcome IS NOT NULL and actual_outcome IS NOT NULL'
   db.query(query, (err, result) => {
     if (err) {
       console.error(err);

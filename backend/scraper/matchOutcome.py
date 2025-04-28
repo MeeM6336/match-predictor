@@ -40,8 +40,14 @@ def parse_results(soup):
     matches = []
 
     try:
-        results_container = soup.find("div", class_="results-all")
-        results_day = results_container.find_all("div", class_="results-sublist")
+        results_container = soup.find_all("div", class_="results-all")
+
+        if len(results_container) > 1:
+            container = results_container[1]
+        else:
+            container = results_container[0]
+
+        results_day = container.find_all("div", class_="results-sublist")
 
         for result_day in results_day:
             date_string = result_day.find("div", class_="standard-headline")
@@ -114,7 +120,7 @@ def main():
         print("Database connection error:", e)
         return
     
-    driver = Driver(uc=True, page_load_strategy="eager", headless=False)
+    driver = Driver(uc=True, headless=False)
 
     try:
         url = 'https://www.hltv.org/results'
