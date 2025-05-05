@@ -1,19 +1,21 @@
 import time
+from pathlib import Path
 import json
 from datetime import datetime, timedelta
 
 def load_teams():
     try:
-        with open("assets/data/teams.json") as f:
+        teams_path = Path(__file__).resolve().parent / 'assets/data/teams.json'
+        
+        with open(teams_path) as f:
             print("File opened successfully")
             return json.load(f)
-            
     except Exception as e:
-        print("Error opening file: ", e)
+        print(f"Failed to open file: {e}")
 
 def get_dates():
     date_now = datetime.now().strftime('%Y-%m-%d')
-    date_ago = (datetime.now() - timedelta(days=150)).strftime('%Y-%m-%d')
+    date_ago = (datetime.now() - timedelta(days=160)).strftime('%Y-%m-%d')
 
     return (date_now, date_ago)
 

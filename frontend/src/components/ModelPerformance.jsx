@@ -4,7 +4,6 @@ import { fetchModelMetrics, fetchMatchPredictionStats } from '../assets/util/mat
 
 
 const ModelPerformance = () => {
-  
   const [modelMetric, setModelMetric] = useState();
   const [upcomingMatchStats, setUpcomingMatchStats] = useState();
   const [calculatedMetrics, setCalculatedMetrics] = useState();
@@ -20,9 +19,36 @@ const ModelPerformance = () => {
 
   useEffect (() => {
     const loadUpcomingMatchStats = async () => {
-      const upcomingMatchStats = await fetchMatchPredictionStats();
-      setUpcomingMatchStats(upcomingMatchStats[0]);
-      console.log(upcomingMatchStats);
+      const matchPredictionsStats = await fetchMatchPredictionStats();
+      let t_neg = 0, t_pos = 0, f_neg = 0, f_pos = 0, totalMatches = 0;
+
+      if(!matchPredictionsStats)
+        return;
+
+      matchPredictionsStats.forEach(match => {
+        if (!((match.outcome == null) || (match.actual_outcome == null))) {
+          totalMatches++;
+
+          if (match.outcome == 1 && match.actual_outcome == 1) {
+            t_pos++;
+          }
+
+          else if (match.outcome == 1 && match.actual_outcome == 0) {
+            f_pos++;
+          }
+
+          else if (match.outcome == 0 && match.actual_outcome == 0) {
+            t_neg++;
+          }
+
+          else if (match.outcome == 0 && match.actual_outcome == 1) {
+            f_neg++;
+          }
+        }
+      });
+
+      setUpcomingMatchStats({t_neg, t_pos, f_neg, f_pos});
+      console.log({t_neg, t_pos, f_neg, f_pos, totalMatches})
     }
 
     loadUpcomingMatchStats();
@@ -32,35 +58,14 @@ const ModelPerformance = () => {
     if(!modelMetric)
       return;
 
-    const calculateMetrics = () => {
-      const calculateLogLoss = (yTrue, yPred) => {
-        const epsilon = 1e-15;
-        let totalLoss = 0;
-      
-        for (let i = 0; i < yTrue.length; i++) {
-          const y = yTrue[i];
-          let p = yPred[i];
-      
-          p = Math.min(Math.max(p, epsilon), 1 - epsilon);
-      
-          const loss = -(y * Math.log(p) + (1 - y) * Math.log(1 - p));
-          totalLoss += loss;
-        }
-      
-        return totalLoss / yTrue.length;
-      };
+    const accuracy = (modelMetric.t_pos + modelMetric.t_neg)/(modelMetric.t_pos + modelMetric.t_neg + modelMetric.f_neg + modelMetric.f_pos);
+    const precision = (modelMetric.t_pos)/(modelMetric.t_pos + modelMetric.f_pos);
+    const recall = (modelMetric.t_pos)/(modelMetric.t_pos + modelMetric.f_neg);
+    const f1 = (2 * precision * recall)/(precision + recall); 
 
-      const accuracy = (modelMetric.t_pos + modelMetric.t_neg)/(modelMetric.t_pos + modelMetric.t_neg + modelMetric.f_neg + modelMetric.f_pos);
-      const precision = (modelMetric.t_pos)/(modelMetric.t_pos + modelMetric.f_pos);
-      const recall = (modelMetric.t_pos)/(modelMetric.t_pos + modelMetric.f_neg);
-      const f1 = (2 * precision * recall)/(precision + recall); 
-      const logLoss = calculateLogLoss(modelMetric.)
+    setCalculatedMetrics([accuracy, precision, recall, f1, modelMetric.log_loss, modelMetric.roc_auc]);
 
-      setCalculatedMetrics([accuracy, precision, recall, f1])
-    };
-
-    calculateMetrics();
-  }, [modelMetric, upcomingMatchStats])
+  }, [modelMetric])
 
   const getMatrixCellStyle = (value) => {
     const maxVal = modelMetric['t_neg'] + modelMetric['t_pos'] + modelMetric['f_neg'] + modelMetric['f_pos'];
@@ -99,6 +104,14 @@ const ModelPerformance = () => {
             <p className='performance-metric-number'>{(calculatedMetrics[3]).toFixed(4)}</p>
             <p className='performance-metric-name'>F1-Score</p>
           </div>
+          <div className='performance-metric'>
+            <p className='performance-metric-number'>{(calculatedMetrics[4]).toFixed(4)}</p>
+            <p className='performance-metric-name'>Log Loss</p>
+          </div>
+          <div className='performance-metric'>
+            <p className='performance-metric-number'>{(calculatedMetrics[5]).toFixed(4)}</p>
+            <p className='performance-metric-name'>ROC AUC</p>
+          </div>
         </div>
       ) : (<div></div>)}
         <div className='performance-grid-container'>
@@ -113,7 +126,7 @@ const ModelPerformance = () => {
                       <th>1</th>
                     </tr>
                   </thead>
-                  {modelMetric ? (
+                  {upcomingMatchStats ? (
                     <tbody>
                       <tr>
                         <th>0</th>
@@ -131,8 +144,34 @@ const ModelPerformance = () => {
               <div className='confusion-matrix-legend'></div>
           </div>
         </div>
-        <div className='prediction-container'>
-          <p></p>
+        <div className='confusion-matrix-container'>
+        <p>Live Data Confusion Matrix</p>
+              <div className='confusion-matrix-table-container'>
+                <table className='confusion-matrix-table'>
+                  <thead>
+                    <tr>
+                      <th></th>
+                      <th>0</th>
+                      <th>1</th>
+                    </tr>
+                  </thead>
+                  {upcomingMatchStats ? (
+                    <tbody>
+                      <tr>
+                        <th>0</th>
+                        <td style={getMatrixCellStyle(upcomingMatchStats.t_neg)}>{upcomingMatchStats.t_neg}</td>
+                        <td style={getMatrixCellStyle(upcomingMatchStats.f_pos)}>{upcomingMatchStats.f_pos}</td>
+                      </tr>
+                      <tr>
+                        <th>1</th>
+                        <td style={getMatrixCellStyle(upcomingMatchStats.f_neg)}>{upcomingMatchStats.f_neg}</td>
+                        <td style={getMatrixCellStyle(upcomingMatchStats.t_pos)}>{upcomingMatchStats.t_pos}</td>
+                      </tr>
+                    </tbody>
+                    ) : (<tbody></tbody>)}
+                </table>
+              <div className='confusion-matrix-legend'></div>
+          </div>
         </div>
         <div className='accuracy-history-container'>
           

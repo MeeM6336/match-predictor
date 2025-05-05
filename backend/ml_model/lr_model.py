@@ -2,7 +2,6 @@ import joblib
 import json
 import pandas as pd
 import numpy as np
-from dotenv import load_dotenv
 from pathlib import Path
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import train_test_split, GridSearchCV
@@ -16,7 +15,7 @@ def lr_train_model(matches):
     X = matches[:, :-1].astype(float)
     y = matches[:, -1].astype(int)
 
-    X_trainval, X_test, y_trainval, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+    X_trainval, X_test, y_trainval, y_test = train_test_split(X, y, test_size=0.2, random_state=7)
     
     model_path = Path(__file__).resolve().parent / f"lr_model_data/test_data_{getDateStamp()}.npz"
 
@@ -30,6 +29,7 @@ def lr_train_model(matches):
 
     lr_classifier_path = Path(__file__).resolve().parent / f"lr_model_data/lr_classifier_{getDateStamp()}.pkl"
     save_object(grid_search.best_estimator_, lr_classifier_path)
+    print("Finished model training")
 
 
 def evaluate_model(model, test_data):

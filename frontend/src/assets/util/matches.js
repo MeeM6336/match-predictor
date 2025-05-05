@@ -29,7 +29,3 @@ export const fetchModelMetrics = async (modelName, modelDate) => {
         return [];
     }
 }
-
-export function heatMap() {
-
-}

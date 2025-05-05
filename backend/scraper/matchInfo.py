@@ -12,33 +12,91 @@ from scraperUtil import get_dates, load_teams
 '''For future models, implement more features such as type of tournament [online, lan, big_event, major]'''
 load_dotenv()
 
-def insert_match_info(cursor, df):
-    query = "INSERT INTO matches (date, tournament, map, team_a, team_b, outcome) VALUES (%s, %s, %s, %s, %s, %s)"
-    val = (df["dateTime"].iloc[0], 
-           df["tournamentName"].iloc[0], 
-           df["map"].iloc[0],
-           df["teamNameA"].iloc[0], 
-           df["teamNameB"].iloc[0], 
-           int(df["outcome"].iloc[0]))
+def insert_series_info(cursor, match_info_df_list, match_stats_df_list, match_type):
+    series_len = len(match_info_df_list)
 
-    cursor.execute(query, val)
-    pk = cursor.lastrowid
+    team_a_wins = 0
+    team_b_wins = 0
+    series_outcome = None
+
+    match match_type:
+        case "Majors":
+            series_match_type = 4
+
+        case "BigEvents":
+            series_match_type = 3
+
+        case "Lan":
+            series_match_type = 2
+
+        case "Online":
+            series_match_type = 1
+
+    for df in match_info_df_list:
+        outcome = int(df["outcome"].iloc[0])
+        if outcome == 1:
+            team_a_wins += 1
+        else:
+            team_b_wins += 1
     
-    return pk
+    if team_a_wins > team_b_wins:
+        series_outcome = 1
+    elif team_a_wins < team_b_wins:
+        series_outcome = 0
+
+    match_diff = abs(team_a_wins - team_b_wins)
+
+    if series_len == 1:
+        best_of = 1
+    elif series_len == 2:
+        best_of = 3
+    elif series_len == 3:
+        if match_diff == 1:
+            best_of = 3
+        else:
+            best_of = 5
+    else:
+        best_of= 5
+
+    teamA_dfs = [pair[0] for pair in match_stats_df_list]
+    teamB_dfs = [pair[1] for pair in match_stats_df_list]
+    avg_teamA = pd.concat(teamA_dfs, ignore_index=True).mean(numeric_only=True)
+    avg_teamB = pd.concat(teamB_dfs, ignore_index=True).mean(numeric_only=True)
+
+    avg_kda_teamA = (float(avg_teamA["K"]) + float(avg_teamA["A"])) / float(avg_teamA["D"])
+    avg_rating_teamA = float(avg_teamA["rating"])
+    avg_adr_teamA = float(avg_teamA["ADR"])
+    avg_kast_teamA = float(avg_teamA["KAST"])
+
+    avg_kda_teamB = (float(avg_teamB["K"]) + float(avg_teamB["A"])) / float(avg_teamB["D"])
+    avg_rating_teamB = float(avg_teamB["rating"])
+    avg_adr_teamB = float(avg_teamB["ADR"])
+    avg_kast_teamB = float(avg_teamB["KAST"])
 
 
-def insert_match_team_stats(cursor, pk, df):
-    query = "INSERT INTO match_team_stats (team_name, match_id, team_rating, avg_kda, avg_kast, avg_adr) VALUES (%s, %s, %s, %s, %s, %s)"
-    val = (df["team_name"].iloc[0], 
-    pk, 
-    float(df["rating"].iloc[0]), 
-    float(((df["K"].iloc[0] + df["A"].iloc[0])/(df["D"].iloc[0]))), 
-    float(df["KAST"].iloc[0]), 
-    float(df["ADR"].iloc[0]))
+    query = "INSERT INTO matches (date, tournament, tournament_type, best_of, team_a, team_a_rating, team_a_kda, team_a_adr, team_a_kast, team_b, team_b_rating, team_b_kda, team_b_adr, team_b_kast, outcome) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
+    val = (match_info_df_list[0]["dateTime"].iloc[0], 
+        match_info_df_list[0]["tournamentName"].iloc[0], 
+        series_match_type,
+        best_of,
+        match_info_df_list[0]["teamNameA"].iloc[0], 
+        avg_rating_teamA,
+        avg_kda_teamA,
+        avg_adr_teamA,
+        avg_kast_teamA,
+        match_info_df_list[0]["teamNameB"].iloc[0],
+        avg_rating_teamB,
+        avg_kda_teamB,
+        avg_adr_teamB,
+        avg_kast_teamB,
+        series_outcome
+    )
+
     cursor.execute(query, val)
+
     
 def extract_match_info(soup):
-    match_info = soup.select("div.match-info-box-con")[0]
+    match_info = soup.find("div", "match-info-box-con")
     data = {}
 
     if match_info:
@@ -76,7 +134,7 @@ def extract_match_info(soup):
 
 def extract_match_team_stats(soup):
     try:
-        tables = soup.select("table.totalstats")
+        tables = soup.find_all("table", "totalstats")
         if len(tables) < 2:
             print("Error: Could not find both team stats tables.")
             return None, None
@@ -134,45 +192,75 @@ def extract_match_team_stats(soup):
     return df_teamA, df_teamB
 
 
-def scrape_team_data(driver, cursor, mydb, team_id, team_name, date_ago, date_now):
-    print(f"Scraping matches for team: {team_name}")
+def scrape_team_data(driver, cursor, mydb, team_id, team_name, date_ago, date_now, match_type):
+    print(f"Scraping {match_type} matches for team: {team_name}")
     try:
-        url = f"https://www.hltv.org/stats/teams/matches/{team_id}/{team_name}?csVersion=CS2&startDate={date_ago}&endDate={date_now}&rankingFilter=Top50"
+        url = f"https://www.hltv.org/stats/teams/matches/{team_id}/{team_name}?csVersion=CS2&startDate={date_ago}&endDate={date_now}&matchType={match_type}&rankingFilter=Top50"
         driver.get(url)
         soup = BeautifulSoup(driver.page_source, "html.parser")
-        match_table = soup.select("table.stats-table")
-
-        if not match_table:
+        match_table = soup.find("table", class_="stats-table")
+        
+        if not match_table or not match_table.find("tbody"):
             print(f"No match table found for {team_name}")
             return
 
-        match_links = [l.get("href") for l in match_table[0].find_all('a') if "/stats/matches" in l.get("href", "")]
-        match_urls = [f"https://www.hltv.org{l}" for l in match_links]
+        tbody = match_table.find("tbody")
 
-        for match_url in match_urls:
-            try:
-                driver.get(match_url)
-                time.sleep(random.uniform(2, 5))
+        groupNum = None
+        match_info_dataframes = []
+        team_stats_data_frames = []
+        contains_match = False
 
-                soup = BeautifulSoup(driver.page_source, "html.parser")
-                match_info = extract_match_info(soup)
-                team_stat_A, team_stat_B = extract_match_team_stats(soup)
+        def process_current_group():
+            nonlocal match_info_dataframes, team_stats_data_frames
+            if contains_match and match_info_dataframes and team_stats_data_frames:
+                try:
+                    insert_series_info(cursor, match_info_dataframes, team_stats_data_frames, match_type)
+                    mydb.commit()
+                except Exception as e:
+                    mydb.rollback()
+                    print(f"Error processing match group: {e}")
 
-                if match_info.empty or team_stat_A.empty or team_stat_B.empty:
-                    print("Skipping match due to missing data:", match_url)
-                    continue
+        for row in tbody.find_all("tr"):
+            currentGroupNum = row.get("class")[0]
 
-                pk = insert_match_info(cursor, match_info)
-                insert_match_team_stats(cursor, pk, team_stat_A)
-                insert_match_team_stats(cursor, pk, team_stat_B)
-                mydb.commit()
+            if groupNum != currentGroupNum:
+                process_current_group()
 
-            except Exception as e:
-                mydb.rollback()
-                print(f"Error processing match {match_url}: {e}")
+                groupNum = currentGroupNum
+                match_info_dataframes = []
+                team_stats_data_frames = []
+                contains_match = False
+
+            links = [a.get("href", "") for a in row.find_all("a")]
+            match_link = next((link for link in links if "/stats/matches" in link), None)
+
+            if not match_link:
+                continue
+
+            full_link = f"https://www.hltv.org{match_link}"
+            driver.get(full_link)
+            soup = BeautifulSoup(driver.page_source, "html.parser")
+
+            match_info = extract_match_info(soup)
+            team_stats_A, team_stats_B = extract_match_team_stats(soup)
+
+            if (
+                match_info is None or team_stats_A is None or team_stats_B is None
+                or match_info.empty or team_stats_A.empty or team_stats_B.empty
+            ):
+                print("Skipping match due to missing data:", match_link)
+                continue
+
+            contains_match = True
+            match_info_dataframes.append(match_info)
+            team_stats_data_frames.append((team_stats_A, team_stats_B))
+
+        process_current_group()
 
     except Exception as e:
         print(f"Error retrieving match list for {team_name}: {e}")
+
 
 def main():
     try:
@@ -188,13 +276,15 @@ def main():
         print("Database connection error:", e)
         return
 
-    driver = Driver(uc=True, page_load_strategy="eager", headless=True)
+    driver = Driver(uc=True, page_load_strategy="eager", headless=False)
     date_now, date_ago = get_dates()
     teams = load_teams()
+    match_types = ["Majors", "BigEvents","Lan", "Online"]
 
     try:
         for team_id, team_name in teams.items():
-            scrape_team_data(driver, cursor, mydb, team_id, team_name, date_ago, date_now)
+            for match_type in match_types:
+                scrape_team_data(driver, cursor, mydb, team_id, team_name, date_ago, date_now, match_type)
     finally:
         driver.quit()
         cursor.close()
