@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import mysql from 'mysql2';
 import cron from 'node-cron';
+import path from 'path';
 import { spawn } from 'child_process'
 import 'dotenv/config';
 
@@ -29,7 +30,8 @@ db.connect((err) => {
 
 // Inserts today's matches into DB
 cron.schedule('0 23 * * *', () => {
-  const um_python = spawn('python', ['scraper/upcomingMatches.py'])
+  const um_path = path.resolve(__dirname, 'scraper', 'matchOutcome.py');
+  const um_python = spawn('python', [um_path])
 
   um_python.stdout.on('data', (data) => {
     console.log(`Python stdout: ${data.toString()}`);
@@ -42,7 +44,8 @@ cron.schedule('0 23 * * *', () => {
   um_python.on('close', (code) => {
     console.log(`Python script (upcomingMatches) exited with code ${code}`);
 
-    const lrp_python = spawn('python', ['ml_model/lr_predict.py'])
+    const lrp_path = path.resolve(__dirname, 'ml_model', 'lr_predict.py');
+    const lrp_python = spawn('python', [lrp_path])
 
     lrp_python.stdout.on('data', (data) => {
       console.log(`Python stdout: ${data.toString()}`);
@@ -59,18 +62,36 @@ cron.schedule('0 23 * * *', () => {
 });
 
 cron.schedule('55 23 * * *', () => {
-  const results_python = spawn('python', ['scraper/matchOutcome.py'])
+  const mo_path = path.resolve(__dirname, 'scraper', 'matchOutcome.py')
+  const mo_python = spawn('python', [mo_path])
 
-  results_python.stdout.on('data', (data) => {
+  mo_python.stdout.on('data', (data) => {
     console.log(`Python stdout: ${data.toString()}`);
   });
 
-  results_python.stderr.on('data', (data) => {
+  mo_python.stderr.on('data', (data) => {
     console.error(`Python stderr: ${data}`);
   });
 
-  results_python.on('close', (code) => {
+  mo_python.on('close', (code) => {
     console.log(`Python script (matchOutcome) exited with code ${code}`);
+  });
+});
+
+cron.schedule('0 1 * * 1', () => {
+  const tr_path = path.resolve(__dirname, 'scraper', 'teamRanking.py')
+  const tr_python = spawn('python', [tr_path])
+
+  tr_python.stdout.on('data', (data) => {
+    console.log(`Python stdout: ${data.toString()}`);
+  });
+
+  tr_python.stderr.on('data', (data) => {
+    console.error(`Python stderr: ${data}`);
+  });
+
+  tr_python.on('close', (code) => {
+    console.log(`Python script (teamRanking) exited with code ${code}`);
   });
 });
 

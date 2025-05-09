@@ -2,15 +2,9 @@ from bs4 import BeautifulSoup
 from io import StringIO
 from seleniumbase import Driver
 import pandas as pd
-import time
-import random
-import os
-import mysql.connector
-from dotenv import load_dotenv   
-from scraperUtil import get_dates, load_teams
+from scraperUtil import get_dates, load_teams, db_connect
 
 '''For future models, implement more features such as type of tournament [online, lan, big_event, major]'''
-load_dotenv()
 
 def insert_series_info(cursor, match_info_df_list, match_stats_df_list, match_type):
     series_len = len(match_info_df_list)
@@ -96,7 +90,7 @@ def insert_series_info(cursor, match_info_df_list, match_stats_df_list, match_ty
 
     
 def extract_match_info(soup):
-    match_info = soup.find("div", "match-info-box-con")
+    match_info = soup.find("div", class_="match-info-box-con")
     data = {}
 
     if match_info:
@@ -134,7 +128,7 @@ def extract_match_info(soup):
 
 def extract_match_team_stats(soup):
     try:
-        tables = soup.find_all("table", "totalstats")
+        tables = soup.find_all("table", class_="totalstats")
         if len(tables) < 2:
             print("Error: Could not find both team stats tables.")
             return None, None
@@ -263,32 +257,22 @@ def scrape_team_data(driver, cursor, mydb, team_id, team_name, date_ago, date_no
 
 
 def main():
-    try:
-        mydb = mysql.connector.connect(
-            host=os.getenv("DB_HOST"),
-            user=os.getenv("DB_USER"),
-            password=os.getenv("DB_PASSWORD"),
-            database=os.getenv("DB_NAME")
-        )
-        cursor = mydb.cursor()
-    
-    except mysql.connector.Error as e:
-        print("Database connection error:", e)
-        return
+    db = db_connect()
+    cursor = db.cursor()
 
     driver = Driver(uc=True, page_load_strategy="eager", headless=False)
     date_now, date_ago = get_dates()
-    teams = load_teams()
+    teams = load_teams(cursor)
     match_types = ["Majors", "BigEvents","Lan", "Online"]
 
     try:
-        for team_id, team_name in teams.items():
+        for team_id, team_name in teams:
             for match_type in match_types:
-                scrape_team_data(driver, cursor, mydb, team_id, team_name, date_ago, date_now, match_type)
+                scrape_team_data(driver, cursor, db, team_id, team_name, date_ago, date_now, match_type)
     finally:
         driver.quit()
         cursor.close()
-        mydb.close()
+        db.close()
 
 
 if __name__ == "__main__":

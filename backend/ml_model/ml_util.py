@@ -39,6 +39,42 @@ def getDateStamp():
 	return date_string
 
 
+def get_hth_wins(cursor, team_a, team_b):
+    query = """
+    SELECT 
+        IFNULL(SUM(CASE 
+            WHEN team_a = %s AND outcome = 1 THEN 1
+            WHEN team_b = %s AND outcome = 0 THEN 1
+            ELSE 0 END), 0) AS wins_team_a,
+
+        IFNULL(SUM(CASE 
+            WHEN team_b = %s AND outcome = 1 THEN 1
+            WHEN team_a = %s AND outcome = 0 THEN 1
+            ELSE 0 END), 0) AS wins_team_b
+    FROM matches
+    WHERE 
+        (team_a = %s AND team_b = %s)
+        OR
+        (team_a = %s AND team_b = %s)
+    """
+    cursor.execute(query, (team_a, team_a, team_b, team_b, team_a, team_b, team_b, team_a))
+    result = cursor.fetchone()
+    return result if result else (0, 0)
+
+
+def get_team_ranking(cursor, team_name):
+	query = """
+	SELECT ranking 
+		FROM teams
+		WHERE team_name = %s
+	"""
+
+	cursor.execute(query, (team_name,))
+	result = cursor.fetchone()
+
+	return result[0] if result else 9999 # Returns 9999 if ranking not found
+
+
 def get_historical_matches():
 	db = db_connect()
 	
@@ -51,8 +87,11 @@ def get_historical_matches():
 		print("Error fetching historical matches:", e)
 		return None
 
+
 def process_matches(df_matches):
 	print("Beginning to process matches...")
+	db = db_connect()
+	cursor = db.cursor()
 
 	df_matches = df_matches.sort_values(by='date').reset_index(drop=True)
 
@@ -71,14 +110,16 @@ def process_matches(df_matches):
 	list_matches = []
 	hth_record = defaultdict(int)
 
-	# Match stats should be ideally in the format (tournament_type, best_of, teamA, teamB, aRating, aKDA, aKAST, aAdr, hthWins,
-	# bRating, bKDA, bKAST, bAdr, hthWins, label) where label is 1 if teamA wins and 0 if teamA loses
+	# Match stats should be ideally in the format (tournament_type, best_of, teamA, aRanking, aRating, aKDA, aKAST, aAdr, hthWins,
+	# teamB, bRanking, bRating, bKDA, bKAST, bAdr, hthWins, label) where label is 1 if teamA wins and 0 if teamA loses
 	for _, row in df_matches.iterrows():
 		encoded_team_a = team_encoder.transform([row.team_a])[0]
 		encoded_team_b = team_encoder.transform([row.team_b])[0]
 		tournament_type = row['tournament_type']
 		best_of = row['best_of']
 
+		a_ranking = get_team_ranking(cursor, row.team_a)
+		b_ranking = get_team_ranking(cursor, row.team_b)
 
 		aRating = row['team_a_rating']
 		aKDA = row['team_a_kda']
@@ -97,9 +138,9 @@ def process_matches(df_matches):
 
 		match = [
 						tournament_type, best_of,
-            encoded_team_a, 
+            encoded_team_a, a_ranking,
             aRating, aKDA, aKAST, aAdr, aHthWins,
-            encoded_team_b,
+            encoded_team_b, b_ranking,
 						bRating, bKDA, bKAST, bAdr, bHthWins,
             label
     ]

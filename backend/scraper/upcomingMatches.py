@@ -1,34 +1,33 @@
 from seleniumbase import Driver
 from bs4 import BeautifulSoup
 import mysql.connector
-import os
+import re
 from datetime import datetime
 from bs4 import BeautifulSoup
-from dotenv import load_dotenv
-from scraperUtil import cookie_Accept
+from scraperUtil import cookie_accept, db_connect
 
-load_dotenv()
 
 def insert_upcoming(matches, cursor):
     query = """
         INSERT INTO upcoming_matches 
-            (team_a, team_b, date, tournament_name)
-        VALUES (%s, %s, %s, %s)
+            (team_a, team_b, date, tournament_name, tournament_type, best_of)
+        VALUES (%s, %s, %s, %s, %s, %s)
     """
     values = [
         (
             match["team_a"],
-            match['team_b'],
-            match['date'],
-            match['tournament_name']
+            match["team_b"],
+            match["date"],
+            match["tournament_name"],
+            match["tournament_type"],
+            match["best_of"]
         )
         for match in matches
     ]
-
     cursor.executemany(query, values)
 
 
-def parse_upcoming_matches(soup):
+def parse_upcoming_matches(soup, driver):
     day = soup.find("div", "matches-list-section")
     matches = day.find_all("div", "match")
 
@@ -50,6 +49,17 @@ def parse_upcoming_matches(soup):
         else:
             continue
 
+        best_of_div = match.find("div", class_="match-meta")
+        if best_of_div is not None:
+            best_of = int(best_of_div.text.strip()[-1])
+            match_data["best_of"] = best_of
+
+        match_rating_div = match.find("div", class_="match-rating")
+        if match_rating_div is not None:
+            tournament_type = 1
+        else:
+            tournament_type = 0
+
         team_names = match.find_all("div", class_="match-teamname")
         if len(team_names) >= 2:
             match_data["team_a"] = team_names[0].text.strip()
@@ -57,24 +67,27 @@ def parse_upcoming_matches(soup):
         else:
             continue
 
-        matches_data.append(match_data)
+        match_link = match.find("a").get("href", "")
+        full_link = f"https://www.hltv.org{match_link}"
+        driver.get(full_link)
+        match_soup = BeautifulSoup(driver.page_source, "html.parser")
+        type_text = match_soup.find("div", class_="padding preformatted-text").text.strip()
+        match_type = re.search(r'\((.*?)\)', type_text).group(1)
+        if match_type == "LAN":
+            tournament_type += 2
+        if match_type == "Online":
+            tournament_type += 1
+        
+        match_data["tournament_type"] = tournament_type
 
+        matches_data.append(match_data)
+    
     return matches_data
         
 
 def main():
-    try:
-        mydb = mysql.connector.connect(
-            host=os.getenv("DB_HOST"),
-            user=os.getenv("DB_USER"),
-            password=os.getenv("DB_PASSWORD"),
-            database=os.getenv("DB_NAME")
-        )
-        cursor = mydb.cursor()
-    
-    except mysql.connector.Error as e:
-        print("Database connection error:", e)
-        return
+    db = db_connect()
+    cursor = db.cursor()
     
     driver = Driver(uc=True, page_load_strategy="eager", headless=True)
 
@@ -82,17 +95,17 @@ def main():
         url = 'https://www.hltv.org/matches'
         driver.get(url)
 
-        cookie_Accept(driver)
+        cookie_accept(driver)
         soup = BeautifulSoup(driver.page_source, 'html.parser')
 
-        matches = parse_upcoming_matches(soup)
+        matches = parse_upcoming_matches(soup, driver)
 
         try:
             insert_upcoming(matches, cursor)
-            mydb.commit()
+            db.commit()
 
         except mysql.connector.Error as e:
-            mydb.rollback()
+            db.rollback()
             print("Error inserting info:", e)
 
 
@@ -102,7 +115,7 @@ def main():
     finally:
         driver.quit()
         cursor.close()
-        mydb.close()
+        db.close()
 
     
 if __name__ == "__main__":

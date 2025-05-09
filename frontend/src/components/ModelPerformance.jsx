@@ -10,7 +10,7 @@ const ModelPerformance = () => {
 
   useEffect(() => {
     const loadModelMetric = async () => {
-      const metric = await fetchModelMetrics("logistic regression", "2025-04-14 09:23:00");
+      const metric = await fetchModelMetrics("logistic regression", "2025-05-06");
       setModelMetric(metric[0]);
     };
 

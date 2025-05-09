@@ -1,13 +1,10 @@
 from seleniumbase import Driver
 from bs4 import BeautifulSoup
 import mysql.connector
-import os
 import re
 from datetime import datetime
 from bs4 import BeautifulSoup
-from dotenv import load_dotenv
-
-load_dotenv()
+from scraperUtil import db_connect
 
 
 def insert_match_outcome(matches, cursor):
@@ -107,19 +104,9 @@ def parse_results(soup):
 
 
 def main():
-    try:
-        db = mysql.connector.connect(
-            host=os.getenv("DB_HOST"),
-            user=os.getenv("DB_USER"),
-            password=os.getenv("DB_PASSWORD"),
-            database=os.getenv("DB_NAME")
-        )
-        cursor = db.cursor()
-    
-    except mysql.connector.Error as e:
-        print("Database connection error:", e)
-        return
-    
+    db = db_connect()
+    cursor = db.cursor()
+
     driver = Driver(uc=True, headless=False)
 
     try:

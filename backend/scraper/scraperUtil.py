@@ -1,17 +1,20 @@
-import time
+from dotenv import load_dotenv
+import os
 from pathlib import Path
-import json
 from datetime import datetime, timedelta
+import mysql.connector
 
-def load_teams():
-    try:
-        teams_path = Path(__file__).resolve().parent / 'assets/data/teams.json'
-        
-        with open(teams_path) as f:
-            print("File opened successfully")
-            return json.load(f)
-    except Exception as e:
-        print(f"Failed to open file: {e}")
+def load_teams(cursor):
+    query = """
+        SELECT id, team_name
+        FROM teams
+        ORDER BY ranking ASC
+        LIMIT 50;
+    """
+
+    cursor.execute(query)
+    return cursor.fetchall()
+
 
 def get_dates():
     date_now = datetime.now().strftime('%Y-%m-%d')
@@ -19,7 +22,8 @@ def get_dates():
 
     return (date_now, date_ago)
 
-def cookie_Accept(driver):
+
+def cookie_accept(driver):
     try:
         accept_button = driver.find_element("#CybotCookiebotDialogBodyLevelButtonLevelOptinAllowAll")
         accept_button.click()
@@ -28,4 +32,22 @@ def cookie_Accept(driver):
         time_button.click()
     except Exception as e:
         print("Error accepting cookies:", e)
+
         
+def db_connect():
+	try:
+		env_path = Path(__file__).resolve().parent.parent / '.env'
+		load_dotenv(env_path)
+
+		db = mysql.connector.connect(
+			host=os.getenv("DB_HOST"),
+			user=os.getenv("DB_USER"),
+			password=os.getenv("DB_PASSWORD"),
+			database=os.getenv("DB_NAME")
+		)
+	
+		return db
+
+	except mysql.connector.Error as e:
+		print("Database connection error:", e)
+		return None

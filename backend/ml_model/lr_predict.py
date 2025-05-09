@@ -3,9 +3,8 @@ import pandas as pd
 import os
 import mysql.connector
 from sklearn.linear_model import LogisticRegression
-from dotenv import load_dotenv
 from pathlib import Path
-from ml_util import get_hth_wins, save_object, db_connect
+from ml_util import get_hth_wins, db_connect
 
 def predict_match(model):
     try:
@@ -40,9 +39,22 @@ def predict_match(model):
             df_matches.iloc[i, df_matches.columns.get_loc("outcome")] = -1
             continue
 
-        match_stat = [
+        team_ranking = []
+        query = f"SELECT ranking FROM teams WHERE team_name=%s"
+        cursor.execute(query, (match_row.team_a,))
+        team_ranking.append(cursor.fetchone())
+
+        cursor.execute(query, (match_row.team_b,))
+        team_ranking.append(cursor.fetchone())
+
+        teams = [
             encoded_team_a, 
             encoded_team_b, 
+        ]
+
+        match_stat = [
+            match_row.tournament_type,
+            match_row.best_of
         ]
 
         # Get hth wins
@@ -50,31 +62,40 @@ def predict_match(model):
 
         # Get avg of stats
         for j, team in enumerate([match_row.team_a, match_row.team_b]):
-            query = f"""
-            SELECT 
-                AVG(team_rating) AS team_rating, 
-                AVG(avg_kda) AS avg_kda, 
-                AVG(avg_kast) AS avg_kast, 
-                AVG(avg_adr) AS avg_adr
-            FROM (
-                SELECT *
-                FROM match_team_stats
-                WHERE team_name = %s
+            ranking = team_ranking[j][0] if team_ranking[j] else 0
+            query = """
+                SELECT 
+                    AVG(team_rating) AS team_rating,
+                    AVG(avg_kda) AS avg_kda,
+                    AVG(avg_kast) AS avg_kast,
+                    AVG(avg_adr) AS avg_adr
+                FROM (
+                    SELECT match_id, team_a_rating AS team_rating, team_a_kda AS avg_kda, team_a_kast AS avg_kast, team_a_adr AS avg_adr
+                    FROM matches
+                    WHERE team_a = %s
+
+                    UNION ALL
+
+                    SELECT match_id, team_b_rating AS team_rating, team_b_kda AS avg_kda, team_b_kast AS avg_kast, team_b_adr AS avg_adr
+                    FROM matches
+                    WHERE team_b = %s
+                ) AS recent_matches
                 ORDER BY match_id DESC
-                LIMIT 10
-            ) AS recent_matches;
+                LIMIT 10;
             """
             
             try:
-                cursor.execute(query, [team])
+                cursor.execute(query, (team, team))
                 team_stats = cursor.fetchone()
 
                 match_stat.extend([
-                    float(team_stats[0]),
-                    float(team_stats[1]),
-                    float(team_stats[2]),
-                    float(team_stats[3]),
-                    float(hth_wins[j])
+                    teams[j],
+                    ranking,
+                    float(team_stats[0]), # team_rating
+                    float(team_stats[1]), # team_kda
+                    float(team_stats[2]), # team_kast
+                    float(team_stats[3]), # team_adr
+                    float(hth_wins[j]) # hth_win
                 ])
 
             except Exception as e:
@@ -112,7 +133,7 @@ def predict_match(model):
 
 def main():
     BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-    MODEL_PATH = os.path.join(BASE_DIR, "../ml_model/lr_model_data/lr_final_classifier_04-26-2025.pkl")
+    MODEL_PATH = os.path.join(BASE_DIR, "../ml_model/lr_model_data/lr_final_classifier_05-06-2025.pkl")
 
     model = None
 
@@ -120,7 +141,7 @@ def main():
         model = joblib.load(MODEL_PATH)
     
     except OSError as e:
-        print("Error opening encoder:", e)
+        print("Error opening model:", e)
 
     predict_match(model)
 

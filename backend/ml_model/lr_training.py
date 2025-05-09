@@ -9,6 +9,5 @@ def main():
     evaluate_model(f'lr_model_data/lr_classifier_{getDateStamp()}.pkl', f'lr_model_data/test_data_{getDateStamp()}.npz')
     lr_train_final_model(f'lr_model_data/lr_classifier_{getDateStamp()}.pkl', matches)
     
-
 if __name__ == "__main__":
     main()
