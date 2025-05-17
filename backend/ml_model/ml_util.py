@@ -5,7 +5,6 @@ import datetime
 import joblib
 from dotenv import load_dotenv
 from pathlib import Path
-from sklearn.preprocessing import LabelEncoder
 from collections import defaultdict
 
 def db_connect():
@@ -39,27 +38,36 @@ def getDateStamp():
 	return date_string
 
 
+# Used in live match prediction to get all hth lineups
 def get_hth_wins(cursor, team_a, team_b):
     query = """
-    SELECT 
-        IFNULL(SUM(CASE 
-            WHEN team_a = %s AND outcome = 1 THEN 1
-            WHEN team_b = %s AND outcome = 0 THEN 1
-            ELSE 0 END), 0) AS wins_team_a,
-
-        IFNULL(SUM(CASE 
-            WHEN team_b = %s AND outcome = 1 THEN 1
-            WHEN team_a = %s AND outcome = 0 THEN 1
-            ELSE 0 END), 0) AS wins_team_b
-    FROM matches
-    WHERE 
-        (team_a = %s AND team_b = %s)
-        OR
-        (team_a = %s AND team_b = %s)
+    SELECT
+        team,
+        COUNT(*) AS wins
+    FROM (
+        SELECT
+            CASE
+                WHEN outcome = 1 THEN team_a
+                ELSE team_b
+            END AS team
+        FROM matches
+        WHERE
+            (team_a = %s AND team_b = %s) OR
+            (team_a = %s AND team_b = %s)
+    ) AS hth
+    GROUP BY team;
     """
-    cursor.execute(query, (team_a, team_a, team_b, team_b, team_a, team_b, team_b, team_a))
-    result = cursor.fetchone()
-    return result if result else (0, 0)
+    cursor.execute(query, (team_a, team_b, team_b, team_a))
+    results = cursor.fetchall()
+
+    # Initialize wins dict
+    wins = {team_a: 0, team_b: 0}
+
+    for row in results:
+        team, count = row
+        wins[team] = count
+
+    return (wins[team_a], wins[team_b])
 
 
 def get_team_ranking(cursor, team_name):
@@ -72,85 +80,144 @@ def get_team_ranking(cursor, team_name):
 	cursor.execute(query, (team_name,))
 	result = cursor.fetchone()
 
-	return result[0] if result else 9999 # Returns 9999 if ranking not found
+	return result[0] if result else None
 
 
-def get_historical_matches():
-	db = db_connect()
+def get_past_stats(cursor, team_name, match_date):
+	query = """
+		SELECT 
+			AVG(team_rating) AS team_rating,
+			AVG(avg_kda) AS avg_kda,
+			AVG(avg_kast) AS avg_kast,
+			AVG(avg_adr) AS avg_adr
+		FROM (
+			SELECT * FROM (
+				SELECT 
+					match_id, 
+					team_a_rating AS team_rating, 
+					team_a_kda AS avg_kda, 
+					team_a_kast AS avg_kast, 
+					team_a_adr AS avg_adr,
+					date
+				FROM matches
+				WHERE team_a = %s AND match_id < %s
+
+				UNION ALL
+
+				SELECT 
+					match_id, 
+					team_b_rating AS team_rating, 
+					team_b_kda AS avg_kda, 
+					team_b_kast AS avg_kast, 
+					team_b_adr AS avg_adr,
+					date
+				FROM matches
+				WHERE team_b = %s AND match_id < %s
+			) AS team_matches
+			ORDER BY date DESC
+			LIMIT 15
+		) AS last_10_matches;
+	"""
+
+	cursor.execute(query, (team_name, match_date, team_name, match_date))
+	past_stats = cursor.fetchone()
 	
-	try:
-		df_matches = pd.read_sql_query("SELECT * FROM matches", db)
-
-		return df_matches
+	return past_stats
 	
-	except Exception as e:
-		print("Error fetching historical matches:", e)
-		return None
+
+def db_insert_feature_vector(cursor, match_id, source, match):
+	if source == "training":
+		query = """
+		INSERT INTO feature_vectors (
+				match_id, best_of, tournament_type, ranking_diff, hth_wins_diff,
+				aRating, aKDA, aKAST, aADR,
+				bRating, bKDA, bKAST, bADR
+		) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+		"""
+	elif source == "live":
+		query = """
+		INSERT INTO live_feature_vectors (
+				match_id, best_of, tournament_type, ranking_diff, hth_wins_diff,
+				aRating, aKDA, aKAST, aADR,
+				bRating, bKDA, bKAST, bADR
+		) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+		"""
+	
+	cursor.execute(query, (match_id,*match))
 
 
-def process_matches(df_matches):
+def process_matches():
 	print("Beginning to process matches...")
 	db = db_connect()
 	cursor = db.cursor()
 
-	df_matches = df_matches.sort_values(by='date').reset_index(drop=True)
+	query = """
+	SELECT 
+		match_id, 
+		date, 
+		tournament_type, 
+		best_of, 
+		team_a,
+		team_b,
+		outcome 
+	FROM matches
+	ORDER BY date asc
+	"""
 
-	# Team name encoding
-	encoder_path = Path(__file__).resolve().parent / 'encoders/team_encoder.pkl'
+	cursor.execute(query)
+	matches = cursor.fetchall()
 
-	if os.path.exists(encoder_path):
-		team_encoder = joblib.load(encoder_path)
-
-	else:
-		all_teams = pd.concat([df_matches['team_a'], df_matches['team_b']]).unique()
-		team_encoder = LabelEncoder()
-		team_encoder.fit(all_teams)
-		save_object(team_encoder, encoder_path)
-
-	list_matches = []
+	list_features = []
 	hth_record = defaultdict(int)
 
-	# Match stats should be ideally in the format (tournament_type, best_of, teamA, aRanking, aRating, aKDA, aKAST, aAdr, hthWins,
-	# teamB, bRanking, bRating, bKDA, bKAST, bAdr, hthWins, label) where label is 1 if teamA wins and 0 if teamA loses
-	for _, row in df_matches.iterrows():
-		encoded_team_a = team_encoder.transform([row.team_a])[0]
-		encoded_team_b = team_encoder.transform([row.team_b])[0]
-		tournament_type = row['tournament_type']
-		best_of = row['best_of']
+	# Match stats should be ideally in the format (tournament_type, best_of, ranking_diff, hth_diff, aRating, aKDA, aKAST, aAdr,
+	# bRating, bKDA, bKAST, bAdr, label, match_id) where label is 1 if teamA wins and 0 if teamA loses
+	for match in matches:
+		match_id = match[0]
+		match_date = match[1]
+		tournament_type = match[2]
+		best_of = match[3]
+		a_team = match[4]
+		b_team = match[5]
+		match_outcome = match[6]
 
-		a_ranking = get_team_ranking(cursor, row.team_a)
-		b_ranking = get_team_ranking(cursor, row.team_b)
+		a_ranking = get_team_ranking(cursor, a_team)
+		b_ranking = get_team_ranking(cursor, b_team)
 
-		aRating = row['team_a_rating']
-		aKDA = row['team_a_kda']
-		aKAST = row['team_a_adr']
-		aAdr = row['team_a_kast']
+		if (a_ranking == None or b_ranking == None):
+			continue
 
-		bRating = row['team_b_rating']
-		bKDA = row['team_b_kda']
-		bKAST = row['team_b_adr']
-		bAdr = row['team_b_kast']
+		ranking_diff = a_ranking - b_ranking
 
-		aHthWins = hth_record[(row.team_a, row.team_b)]
-		bHthWins = hth_record[(row.team_b, row.team_a)]
+		aHthWins = hth_record[(a_team, b_team)]
+		bHthWins = hth_record[(b_team, a_team)]
 
-		label = row['outcome']
+		hth_diff = aHthWins - bHthWins
 
-		match = [
-						tournament_type, best_of,
-            encoded_team_a, a_ranking,
-            aRating, aKDA, aKAST, aAdr, aHthWins,
-            encoded_team_b, b_ranking,
-						bRating, bKDA, bKAST, bAdr, bHthWins,
-            label
-    ]
-		list_matches.append(match)
+		team_stats = []
+		for team in [a_team, b_team]:
+			team_stats.append(get_past_stats(cursor, team, match_date))
 
-		if label == 1:
-			hth_record[(row.team_a, row.team_b)] += 1
+		# Append aggregate stats
+		x = [
+			tournament_type, best_of, ranking_diff, hth_diff,
+			team_stats[0][0], team_stats[0][1], team_stats[0][2], team_stats[0][3],
+			team_stats[1][0], team_stats[1][1], team_stats[1][2], team_stats[1][3],
+			match_outcome, match_id
+		]
+
+		# Checks for any null values
+		if any(val is None for val in x):
+			continue
+
+		if match_outcome == 1:
+			hth_record[(a_team, b_team)] += 1
 		else:
-				hth_record[(row.team_b, row.team_a)] += 1
+			hth_record[(b_team, a_team)] += 1
 
-	print("Match processing complete and length of matches is", len(df_matches))
+		list_features.append(x)
 
-	return list_matches
+	cursor.close()
+	db.close()
+
+	return list_features

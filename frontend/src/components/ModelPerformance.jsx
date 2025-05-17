@@ -10,7 +10,7 @@ const ModelPerformance = () => {
 
   useEffect(() => {
     const loadModelMetric = async () => {
-      const metric = await fetchModelMetrics("logistic regression", "2025-05-06");
+      const metric = await fetchModelMetrics("logistic regression", "2025-05-16");
       setModelMetric(metric[0]);
     };
 
@@ -24,6 +24,8 @@ const ModelPerformance = () => {
 
       if(!matchPredictionsStats)
         return;
+
+      console.log(matchPredictionsStats)
 
       matchPredictionsStats.forEach(match => {
         if (!((match.outcome == null) || (match.actual_outcome == null))) {

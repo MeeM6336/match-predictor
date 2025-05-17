@@ -8,6 +8,7 @@ def load_teams(cursor):
     query = """
         SELECT id, team_name
         FROM teams
+        WHERE ranking > 15 # Need to change l8r
         ORDER BY ranking ASC
         LIMIT 50;
     """
@@ -18,7 +19,7 @@ def load_teams(cursor):
 
 def get_dates():
     date_now = datetime.now().strftime('%Y-%m-%d')
-    date_ago = (datetime.now() - timedelta(days=160)).strftime('%Y-%m-%d')
+    date_ago = (datetime.now() - timedelta(days=365)).strftime('%Y-%m-%d')
 
     return (date_now, date_ago)
 

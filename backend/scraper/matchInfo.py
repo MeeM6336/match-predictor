@@ -4,8 +4,6 @@ from seleniumbase import Driver
 import pandas as pd
 from scraperUtil import get_dates, load_teams, db_connect
 
-'''For future models, implement more features such as type of tournament [online, lan, big_event, major]'''
-
 def insert_series_info(cursor, match_info_df_list, match_stats_df_list, match_type):
     series_len = len(match_info_df_list)
 
@@ -260,7 +258,7 @@ def main():
     db = db_connect()
     cursor = db.cursor()
 
-    driver = Driver(uc=True, page_load_strategy="eager", headless=False)
+    driver = Driver(uc=True, page_load_strategy="eager", headless=True)
     date_now, date_ago = get_dates()
     teams = load_teams(cursor)
     match_types = ["Majors", "BigEvents","Lan", "Online"]

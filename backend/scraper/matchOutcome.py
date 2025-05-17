@@ -107,22 +107,24 @@ def main():
     db = db_connect()
     cursor = db.cursor()
 
-    driver = Driver(uc=True, headless=False)
+    driver = Driver(uc=True, headless=True)
 
     try:
-        url = 'https://www.hltv.org/results'
-        driver.get(url)
-        soup = BeautifulSoup(driver.page_source, 'html.parser')
+        offset_list = [0, 100, 200]
+        for offset in offset_list:
+            url = f"https://www.hltv.org/results?offset={offset}"
+            driver.get(url)
+            soup = BeautifulSoup(driver.page_source, 'html.parser')
 
-        matches = parse_results(soup)
-        
-        try:
-            insert_match_outcome(matches, cursor)
-            db.commit()
-        
-        except mysql.connector.Error as e:
-            db.rollback()
-            print("Error inserting info:", e)
+            matches = parse_results(soup)
+            
+            try:
+                insert_match_outcome(matches, cursor)
+                db.commit()
+            
+            except mysql.connector.Error as e:
+                db.rollback()
+                print("Error inserting info:", e)
 
     except Exception as e:
         print("Error", e)

@@ -2,148 +2,127 @@ import joblib
 import pandas as pd
 import os
 import mysql.connector
+import numpy as np
 from sklearn.linear_model import LogisticRegression
 from pathlib import Path
-from ml_util import get_hth_wins, db_connect
+from ml_util import get_hth_wins, db_connect, db_insert_feature_vector, get_past_stats
 
 def predict_match(model):
-    try:
-        encoder_path = Path(__file__).resolve().parent / 'encoders/team_encoder.pkl'
-        team_encoder = joblib.load(encoder_path)
+	db = db_connect()
+	cursor = db.cursor()
+
+	scaler_path = Path(__file__).resolve().parent / "lr_model_data/standard_lr_scaler.pkl"
+	scaler = joblib.load(scaler_path)
     
-    except OSError as e:
-        print("Error opening encoder:", e)
+	try:
+		df_matches = pd.read_sql_query("SELECT * FROM upcoming_matches WHERE outcome IS NULL", db)
 
-    db = db_connect()
-    cursor = db.cursor()
-    
-    try:
-        df_matches = pd.read_sql_query("SELECT * FROM upcoming_matches WHERE outcome IS NULL", db)
+	except Exception as e:
+			print("Error fetching upcoming matches:", e)
 
-    except Exception as e:
-        print("Error:", e)
+	for match_row in df_matches.itertuples(index=False):
+		query = f"SELECT ranking FROM teams WHERE team_name=%s"
+		cursor.execute(query, (match_row.team_a,))
+		a_ranking = cursor.fetchone()
 
-    for i, match_row in enumerate(df_matches.itertuples(index=False)):
-        try:
-            encoded_team_a = team_encoder.transform([match_row.team_a])[0]
-        except:
-            encoded_team_a = -1
-        
-        try:
-            encoded_team_b = team_encoder.transform([match_row.team_b])[0]
-        except:
-            encoded_team_b = -1
-        
-        # Checks teams validity
-        if encoded_team_a == -1 or encoded_team_b == -1:
-            df_matches.iloc[i, df_matches.columns.get_loc("outcome")] = -1
-            continue
+		cursor.execute(query, (match_row.team_b,))
+		b_ranking = cursor.fetchone()
+		ranking_diff = 0
+		if ((a_ranking and b_ranking) is not None):
+			ranking_diff = a_ranking[0] - b_ranking[0]
 
-        team_ranking = []
-        query = f"SELECT ranking FROM teams WHERE team_name=%s"
-        cursor.execute(query, (match_row.team_a,))
-        team_ranking.append(cursor.fetchone())
+		# Get hth wins
+		hth_wins = get_hth_wins(cursor, match_row.team_a, match_row.team_b)
+		hth_diff = 0
+		if (hth_wins is not None):
+			hth_diff = hth_wins[0] - hth_wins[1]
 
-        cursor.execute(query, (match_row.team_b,))
-        team_ranking.append(cursor.fetchone())
+		match_date = match_row.date
 
-        teams = [
-            encoded_team_a, 
-            encoded_team_b, 
-        ]
+		match_stat = [
+			match_row.tournament_type,
+			match_row.best_of,
+			int(ranking_diff),
+			int(hth_diff)
+		]
 
-        match_stat = [
-            match_row.tournament_type,
-            match_row.best_of
-        ]
+		# Get avg of stats
+		for team in [match_row.team_a, match_row.team_b]:
+			team_stats = get_past_stats(cursor, team, match_date)
 
-        # Get hth wins
-        hth_wins = get_hth_wins(cursor, match_row.team_a, match_row.team_b)
+			if team_stats is None or any(x is None for x in team_stats):
+				match_stat = None
+				break
 
-        # Get avg of stats
-        for j, team in enumerate([match_row.team_a, match_row.team_b]):
-            ranking = team_ranking[j][0] if team_ranking[j] else 0
-            query = """
-                SELECT 
-                    AVG(team_rating) AS team_rating,
-                    AVG(avg_kda) AS avg_kda,
-                    AVG(avg_kast) AS avg_kast,
-                    AVG(avg_adr) AS avg_adr
-                FROM (
-                    SELECT match_id, team_a_rating AS team_rating, team_a_kda AS avg_kda, team_a_kast AS avg_kast, team_a_adr AS avg_adr
-                    FROM matches
-                    WHERE team_a = %s
+			match_stat.extend([
+				float(team_stats[0]), # team_rating
+				float(team_stats[1]), # team_kda
+				float(team_stats[2]), # team_kast
+				float(team_stats[3]), # team_adr
+			])
 
-                    UNION ALL
+		if match_stat is None:
+			continue
+		
+		match_stat_array = np.array(match_stat).reshape(1, -1)
+		match_stat_scaled = scaler.transform(match_stat_array)
+		proba = model.predict_proba(match_stat_scaled)[0]
+		prediction = int(proba[1] >= 0.5)
+		confidence = proba[prediction]
 
-                    SELECT match_id, team_b_rating AS team_rating, team_b_kda AS avg_kda, team_b_kast AS avg_kast, team_b_adr AS avg_adr
-                    FROM matches
-                    WHERE team_b = %s
-                ) AS recent_matches
-                ORDER BY match_id DESC
-                LIMIT 10;
-            """
-            
-            try:
-                cursor.execute(query, (team, team))
-                team_stats = cursor.fetchone()
+		query = f"""
+		UPDATE upcoming_matches 
+			SET outcome = %s, 
+			confidence = %s 
+		WHERE 
+			team_a = %s AND
+			team_b = %s AND
+			date = %s AND
+			tournament_name = %s
+		"""
+		
+		try:
+			cursor.execute(query, (
+				int(prediction),
+				float(confidence),
+				match_row.team_a,
+				match_row.team_b,
+				match_row.date,
+				match_row.tournament_name
+			))
+			db.commit()
+				
+		except mysql.connector.Error as e:
+			db.rollback()
+			print("Error inserting info:", e)
 
-                match_stat.extend([
-                    teams[j],
-                    ranking,
-                    float(team_stats[0]), # team_rating
-                    float(team_stats[1]), # team_kda
-                    float(team_stats[2]), # team_kast
-                    float(team_stats[3]), # team_adr
-                    float(hth_wins[j]) # hth_win
-                ])
-
-            except Exception as e:
-                print("Error:", e)
-
-        proba = model.predict_proba([match_stat])[0]
-        prediction = int(proba[1] >= 0.5)
-        confidence = proba[prediction]
-
-        query = f"""
-        UPDATE upcoming_matches 
-            SET outcome = %s, 
-            confidence = %s 
-        WHERE 
-            team_a = %s AND
-            team_b = %s AND
-            date = %s AND
-            tournament_name = %s
-        """
-        try:
-            cursor.execute(query, (
-                int(prediction),
-                float(confidence),
-                match_row.team_a,
-                match_row.team_b,
-                match_row.date,
-                match_row.tournament_name
-            ))
-            db.commit()
-            
-        except mysql.connector.Error as e:
-            db.rollback()
-            print("Error inserting info:", e)
-
+		try:
+			db_insert_feature_vector(
+				cursor, 
+				int(match_row.match_id), 
+				"live", 
+				match_stat
+			)
+			db.commit()
+				
+		except mysql.connector.Error as e:
+			db.rollback()
+			print(f"Error inserting feature vector for matchID {match_row.match_id}:", e)
+			
+	db.close()
 
 def main():
-    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-    MODEL_PATH = os.path.join(BASE_DIR, "../ml_model/lr_model_data/lr_final_classifier_05-06-2025.pkl")
+	BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+	MODEL_PATH = os.path.join(BASE_DIR, "../ml_model/lr_model_data/lr_final_classifier_05-16-2025.pkl")
 
-    model = None
+	model = None
 
-    try:
-        model = joblib.load(MODEL_PATH)
-    
-    except OSError as e:
-        print("Error opening model:", e)
+	try:
+		model = joblib.load(MODEL_PATH)
+	except OSError as e:
+		print("Error opening model:", e)
 
-    predict_match(model)
+	predict_match(model)
 
 if __name__ == "__main__":
-    main()
+  main()

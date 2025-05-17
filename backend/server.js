@@ -4,6 +4,7 @@ import mysql from 'mysql2';
 import cron from 'node-cron';
 import path from 'path';
 import { spawn } from 'child_process'
+import { fileURLToPath } from 'url';
 import 'dotenv/config';
 
 
@@ -11,6 +12,9 @@ const app = express();
 
 app.use(cors());
 app.use(express.json());
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const db = mysql.createConnection({
   host: process.env.DB_HOST,
@@ -30,7 +34,7 @@ db.connect((err) => {
 
 // Inserts today's matches into DB
 cron.schedule('0 23 * * *', () => {
-  const um_path = path.resolve(__dirname, 'scraper', 'matchOutcome.py');
+  const um_path = path.resolve(__dirname, 'scraper', 'upcomingMatches.py');
   const um_python = spawn('python', [um_path])
 
   um_python.stdout.on('data', (data) => {
@@ -61,7 +65,7 @@ cron.schedule('0 23 * * *', () => {
   });
 });
 
-cron.schedule('55 23 * * *', () => {
+cron.schedule('45 23 * * *', () => {
   const mo_path = path.resolve(__dirname, 'scraper', 'matchOutcome.py')
   const mo_python = spawn('python', [mo_path])
 
