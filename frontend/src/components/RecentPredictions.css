@@ -1,12 +1,12 @@
 .RecentPredictions {
     min-width: 50%;
-    max-height: 44vh;
+    max-height: 50vh;
     box-shadow: 0px 0px 7px rgb(204,204,204);
 }
 
 .prediction-table-container {
     overflow-y: scroll;
-    max-height: 40vh;
+    max-height: 46vh;
 }
 
 .prediction-header {

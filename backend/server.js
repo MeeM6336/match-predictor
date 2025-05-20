@@ -128,7 +128,7 @@ app.get('/upcoming', (req, res) => {
 });
 
 app.get('/upcomingstats', (req, res) => {
-  const query = 'SELECT outcome, actual_outcome FROM upcoming_matches WHERE outcome IS NOT NULL and actual_outcome IS NOT NULL'
+  const query = 'SELECT outcome, actual_outcome, confidence FROM upcoming_matches WHERE outcome IS NOT NULL and actual_outcome IS NOT NULL'
   db.query(query, (err, result) => {
     if (err) {
       console.error(err);

@@ -46,20 +46,20 @@ def predict_match(model):
 			int(hth_diff)
 		]
 
-		# Get avg of stats
-		for team in [match_row.team_a, match_row.team_b]:
-			team_stats = get_past_stats(cursor, team, match_date)
+		team_a_stats = get_past_stats(cursor, match_row.team_a, match_date)
+		team_b_stats = get_past_stats(cursor, match_row.team_b, match_date)
 
-			if team_stats is None or any(x is None for x in team_stats):
-				match_stat = None
-				break
+		try :
+			rating_diff = team_a_stats[0] - team_b_stats[0]
+			KDA_diff = team_a_stats[1] - team_b_stats[1]
+			KAST_diff = team_a_stats[2] - team_b_stats[2]
+			ADR_diff = team_a_stats[3] - team_b_stats[3]
 
-			match_stat.extend([
-				float(team_stats[0]), # team_rating
-				float(team_stats[1]), # team_kda
-				float(team_stats[2]), # team_kast
-				float(team_stats[3]), # team_adr
-			])
+		except Exception as e:
+			print(f"Error creating live feature vector for {match_row.team_a} vs. {match_row.team_b}", e)
+			continue
+
+		match_stat.extend([rating_diff, KDA_diff, KAST_diff, ADR_diff])
 
 		if match_stat is None:
 			continue
@@ -113,7 +113,7 @@ def predict_match(model):
 
 def main():
 	BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-	MODEL_PATH = os.path.join(BASE_DIR, "../ml_model/lr_model_data/lr_final_classifier_05-16-2025.pkl")
+	MODEL_PATH = os.path.join(BASE_DIR, "../ml_model/lr_model_data/lr_final_classifier_05-19-2025.pkl")
 
 	model = None
 

@@ -110,7 +110,7 @@ def main():
     driver = Driver(uc=True, headless=True)
 
     try:
-        offset_list = [0, 100, 200]
+        offset_list = [0, 100, 200, 300]
         for offset in offset_list:
             url = f"https://www.hltv.org/results?offset={offset}"
             driver.get(url)

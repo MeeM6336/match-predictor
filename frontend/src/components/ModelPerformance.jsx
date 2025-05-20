@@ -1,76 +1,102 @@
 import React, { useState, useEffect } from 'react';
 import './ModelPerformance.css';
-import { fetchModelMetrics, fetchMatchPredictionStats } from '../assets/util/matches';
+import { fetchModelMetrics, fetchMatchPredictionStats, computeRocAuc } from '../assets/util/matches';
 
 
 const ModelPerformance = () => {
-  const [modelMetric, setModelMetric] = useState();
-  const [upcomingMatchStats, setUpcomingMatchStats] = useState();
+  const [trainingMetrics, setTrainingMetrics] = useState();
+  const [liveMetrics, setLiveMetrics] = useState();
   const [calculatedMetrics, setCalculatedMetrics] = useState();
+  const [selectedMetricType, setSelectedMetricType] = useState("Training")
+
+  const selectMetricType = (event) => {
+    setSelectedMetricType(event.target.value);
+  };
 
   useEffect(() => {
     const loadModelMetric = async () => {
-      const metric = await fetchModelMetrics("logistic regression", "2025-05-16");
-      setModelMetric(metric[0]);
+      const metric = await fetchModelMetrics("logistic regression", "2025-05-19");
+      setTrainingMetrics(metric[0]);
     };
 
     loadModelMetric();
   }, []);
 
   useEffect (() => {
-    const loadUpcomingMatchStats = async () => {
+    const loadLiveMetrics = async () => {
       const matchPredictionsStats = await fetchMatchPredictionStats();
-      let t_neg = 0, t_pos = 0, f_neg = 0, f_pos = 0, totalMatches = 0;
+      let t_neg = 0, t_pos = 0, f_neg = 0, f_pos = 0;
+      const y_true = [];
+      const y_prob = [];
 
       if(!matchPredictionsStats)
         return;
 
-      console.log(matchPredictionsStats)
-
       matchPredictionsStats.forEach(match => {
-        if (!((match.outcome == null) || (match.actual_outcome == null))) {
-          totalMatches++;
+        const actual = match.actual_outcome;
+        const predicted = match.outcome;
+        const confidence = match.confidence;
 
-          if (match.outcome == 1 && match.actual_outcome == 1) {
-            t_pos++;
-          }
+        if (actual != null && predicted != null && confidence != null) {
+          y_true.push(actual);
+          y_prob.push(confidence);
 
-          else if (match.outcome == 1 && match.actual_outcome == 0) {
-            f_pos++;
-          }
-
-          else if (match.outcome == 0 && match.actual_outcome == 0) {
-            t_neg++;
-          }
-
-          else if (match.outcome == 0 && match.actual_outcome == 1) {
-            f_neg++;
-          }
+          if (predicted == 1 && actual == 1) t_pos++;
+          else if (predicted == 1 && actual == 0) f_pos++;
+          else if (predicted == 0 && actual == 0) t_neg++;
+          else if (predicted == 0 && actual == 1) f_neg++;
         }
       });
 
-      setUpcomingMatchStats({t_neg, t_pos, f_neg, f_pos});
-      console.log({t_neg, t_pos, f_neg, f_pos, totalMatches})
+      const computeLogLoss = (y_true, y_prob) => {
+        const eps = 1e-15;
+        let loss = 0;
+        for (let i = 0; i < y_true.length; i++) {
+          const y = y_true[i];
+          const p = Math.min(Math.max(y_prob[i], eps), 1 - eps);
+          loss += y * Math.log(p) + (1 - y) * Math.log(1 - p);
+        }
+        return -loss / y_true.length;
+      };
+      const log_loss = computeLogLoss(y_true, y_prob)
+      const roc_auc = computeRocAuc(y_true, y_prob);
+
+      setLiveMetrics({t_neg, t_pos, f_neg, f_pos, log_loss, roc_auc});
     }
 
-    loadUpcomingMatchStats();
+    loadLiveMetrics();
   }, []);
 
   useEffect(() => {
-    if(!modelMetric)
+    if(!trainingMetrics && !liveMetrics)
       return;
 
-    const accuracy = (modelMetric.t_pos + modelMetric.t_neg)/(modelMetric.t_pos + modelMetric.t_neg + modelMetric.f_neg + modelMetric.f_pos);
-    const precision = (modelMetric.t_pos)/(modelMetric.t_pos + modelMetric.f_pos);
-    const recall = (modelMetric.t_pos)/(modelMetric.t_pos + modelMetric.f_neg);
-    const f1 = (2 * precision * recall)/(precision + recall); 
+    let accuracy, precision, recall, f1, log_loss, roc_auc;
 
-    setCalculatedMetrics([accuracy, precision, recall, f1, modelMetric.log_loss, modelMetric.roc_auc]);
+    if (selectedMetricType == "Training") {
+      accuracy = (trainingMetrics.t_pos + trainingMetrics.t_neg)/(trainingMetrics.t_pos + trainingMetrics.t_neg + trainingMetrics.f_neg + trainingMetrics.f_pos);
+      precision = (trainingMetrics.t_pos)/(trainingMetrics.t_pos + trainingMetrics.f_pos);
+      recall = (trainingMetrics.t_pos)/(trainingMetrics.t_pos + trainingMetrics.f_neg);
+      f1 = (2 * precision * recall)/(precision + recall);
+      log_loss = trainingMetrics.log_loss;
+      roc_auc = trainingMetrics.roc_auc;
+    }
 
-  }, [modelMetric])
+    else if (selectedMetricType == "Live") {
+      accuracy = (liveMetrics.t_pos + liveMetrics.t_neg)/(liveMetrics.t_pos + liveMetrics.t_neg + liveMetrics.f_neg + liveMetrics.f_pos);
+      precision = (liveMetrics.t_pos)/(liveMetrics.t_pos + liveMetrics.f_pos);
+      recall = (liveMetrics.t_pos)/(liveMetrics.t_pos + liveMetrics.f_neg);
+      f1 = (2 * precision * recall)/(precision + recall);
+      log_loss = liveMetrics.log_loss;
+      roc_auc = liveMetrics.roc_auc;
+    }
+
+    setCalculatedMetrics([accuracy, precision, recall, f1, log_loss, roc_auc]);
+
+  }, [trainingMetrics, liveMetrics, selectedMetricType])
 
   const getMatrixCellStyle = (value) => {
-    const maxVal = modelMetric['t_neg'] + modelMetric['t_pos'] + modelMetric['f_neg'] + modelMetric['f_pos'];
+    const maxVal = trainingMetrics['t_neg'] + trainingMetrics['t_pos'] + trainingMetrics['f_neg'] + trainingMetrics['f_pos'];
     
     const intensity = Math.round((value / maxVal) * 255);
 
@@ -79,7 +105,8 @@ const ModelPerformance = () => {
       color: "white",
       padding: "1rem",
       paddingLeft: "3rem",
-      paddingRight: "3rem"
+      paddingRight: "3rem",
+      minWidth: "2rem"
     };
   };
 
@@ -87,6 +114,13 @@ const ModelPerformance = () => {
     <div className='ModelPerformance'>
       <div className='performance-header'>
         <p>Model Performance</p>
+        <div>
+          <label></label>
+          <select value={selectedMetricType} onChange={selectMetricType}>
+            <option value="Training">Training</option>
+            <option value="Live">Live</option>
+          </select>
+        </div>
       </div>
       {calculatedMetrics ? (
         <div className='performance-metrics-container'>
@@ -118,65 +152,57 @@ const ModelPerformance = () => {
       ) : (<div></div>)}
         <div className='performance-grid-container'>
           <div className='confusion-matrix-container'>
-            <p>Training Data Confusion Matrix</p>
-              <div className='confusion-matrix-table-container'>
-                <table className='confusion-matrix-table'>
-                  <thead>
-                    <tr>
-                      <th></th>
-                      <th>0</th>
-                      <th>1</th>
-                    </tr>
-                  </thead>
-                  {upcomingMatchStats ? (
+            <p>{selectedMetricType} Data Confusion Matrix</p>
+            <div className='confusion-matrix-table-container'>
+              <table className='confusion-matrix-table'>
+                <thead>
+                  <tr>
+                    <th></th>
+                    <th>0</th>
+                    <th>1</th>
+                  </tr>
+                </thead>
+                {liveMetrics ? (
+                  selectedMetricType == "Training" ? (
                     <tbody>
                       <tr>
                         <th>0</th>
-                        <td style={getMatrixCellStyle(modelMetric.t_neg)}>{modelMetric.t_neg}</td>
-                        <td style={getMatrixCellStyle(modelMetric.f_pos)}>{modelMetric.f_pos}</td>
+                        <td style={getMatrixCellStyle(trainingMetrics.t_neg)}>{trainingMetrics.t_neg}</td>
+                        <td style={getMatrixCellStyle(trainingMetrics.f_pos)}>{trainingMetrics.f_pos}</td>
                       </tr>
                       <tr>
                         <th>1</th>
-                        <td style={getMatrixCellStyle(modelMetric.f_neg)}>{modelMetric.f_neg}</td>
-                        <td style={getMatrixCellStyle(modelMetric.t_pos)}>{modelMetric.t_pos}</td>
+                        <td style={getMatrixCellStyle(trainingMetrics.f_neg)}>{trainingMetrics.f_neg}</td>
+                        <td style={getMatrixCellStyle(trainingMetrics.t_pos)}>{trainingMetrics.t_pos}</td>
                       </tr>
                     </tbody>
-                    ) : (<tbody></tbody>)}
-                </table>
-              <div className='confusion-matrix-legend'></div>
-          </div>
-        </div>
-        <div className='confusion-matrix-container'>
-        <p>Live Data Confusion Matrix</p>
-              <div className='confusion-matrix-table-container'>
-                <table className='confusion-matrix-table'>
-                  <thead>
-                    <tr>
-                      <th></th>
-                      <th>0</th>
-                      <th>1</th>
-                    </tr>
-                  </thead>
-                  {upcomingMatchStats ? (
+                  ) : (
                     <tbody>
                       <tr>
                         <th>0</th>
-                        <td style={getMatrixCellStyle(upcomingMatchStats.t_neg)}>{upcomingMatchStats.t_neg}</td>
-                        <td style={getMatrixCellStyle(upcomingMatchStats.f_pos)}>{upcomingMatchStats.f_pos}</td>
+                        <td style={getMatrixCellStyle(liveMetrics.t_neg)}>{liveMetrics.t_neg}</td>
+                        <td style={getMatrixCellStyle(liveMetrics.f_pos)}>{liveMetrics.f_pos}</td>
                       </tr>
                       <tr>
                         <th>1</th>
-                        <td style={getMatrixCellStyle(upcomingMatchStats.f_neg)}>{upcomingMatchStats.f_neg}</td>
-                        <td style={getMatrixCellStyle(upcomingMatchStats.t_pos)}>{upcomingMatchStats.t_pos}</td>
+                        <td style={getMatrixCellStyle(liveMetrics.f_neg)}>{liveMetrics.f_neg}</td>
+                        <td style={getMatrixCellStyle(liveMetrics.t_pos)}>{liveMetrics.t_pos}</td>
                       </tr>
                     </tbody>
-                    ) : (<tbody></tbody>)}
-                </table>
-              <div className='confusion-matrix-legend'></div>
+                  )
+                  ) : (<tbody></tbody>)}
+              </table>
+            <div className='confusion-matrix-legend'></div>
           </div>
         </div>
-        <div className='accuracy-history-container'>
-          
+        <div className='class-representation-container'>
+          <img src="/images/lr_training_class_representation_bar_graph.png"/>
+        </div>
+        <div className='class-seperation-quality-container'>
+          <img src="/images/lr_training_class_seperation_quality_plot.png"/>
+        </div>
+        <div className=''>
+
         </div>
       </div>
     </div>
