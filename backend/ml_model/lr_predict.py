@@ -5,9 +5,10 @@ import mysql.connector
 import numpy as np
 from sklearn.linear_model import LogisticRegression
 from pathlib import Path
-from ml_util import get_hth_wins, db_connect, db_insert_feature_vector, get_past_stats
+from ml_util import get_hth_wins, db_connect, db_insert_feature_vector, get_past_stats, create_class_seperation_quality_plot, create_class_representation_bar_graph, create_cumm_accuracy_graph, create_rolling_accuracy_graph, create_rolling_feature_metrics, create_matches_insertion_graph, create_correlation_matrix
 
-def predict_match(model):
+def predict_match(model, model_name, stage):
+	model_id = 1
 	db = db_connect()
 	cursor = db.cursor()
 
@@ -55,8 +56,7 @@ def predict_match(model):
 			KAST_diff = team_a_stats[2] - team_b_stats[2]
 			ADR_diff = team_a_stats[3] - team_b_stats[3]
 
-		except Exception as e:
-			print(f"Error creating live feature vector for {match_row.team_a} vs. {match_row.team_b}", e)
+		except:
 			continue
 
 		match_stat.extend([rating_diff, KDA_diff, KAST_diff, ADR_diff])
@@ -100,6 +100,7 @@ def predict_match(model):
 			db_insert_feature_vector(
 				cursor, 
 				int(match_row.match_id), 
+				model_id,
 				"live", 
 				match_stat
 			)
@@ -109,20 +110,62 @@ def predict_match(model):
 			db.rollback()
 			print(f"Error inserting feature vector for matchID {match_row.match_id}:", e)
 			
+	# Graph creations
+	query = """
+		SELECT
+			outcome,
+			confidence, 
+			actual_outcome
+		FROM upcoming_Matches 
+		WHERE 
+			outcome IS NOT NULL AND
+			confidence IS NOT NULL
+	"""
+
+	cursor.execute(query)
+	match_outcomes = cursor.fetchall()
+
+	all_outcome = []
+	all_actual_outcomes = []
+	all_confidences = []
+
+	for outcome, confidence, actual_outcome in match_outcomes:
+		all_actual_outcomes.append(actual_outcome)
+		all_outcome.append(outcome)
+
+		if outcome == 0:
+			all_confidences.append(confidence - 0.5)
+		
+		else:
+			all_confidences.append(confidence)
+
+	create_class_seperation_quality_plot(all_actual_outcomes, all_confidences, model_name, stage)
+	create_class_representation_bar_graph(all_outcome, model_name, stage)
+	create_cumm_accuracy_graph(all_outcome, all_actual_outcomes, model_name, stage)
+	create_rolling_accuracy_graph(all_outcome, all_actual_outcomes, model_name, stage)
+
 	db.close()
+
 
 def main():
 	BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-	MODEL_PATH = os.path.join(BASE_DIR, "../ml_model/lr_model_data/lr_final_classifier_05-19-2025.pkl")
+	MODEL_PATH = os.path.join(BASE_DIR, "../ml_model/lr_model_data/lr_final_classifier_05-27-2025.pkl")
 
 	model = None
+	model_name = "logistic_regression"
+	model_id = 1
+	stage = "Live"
 
 	try:
 		model = joblib.load(MODEL_PATH)
 	except OSError as e:
 		print("Error opening model:", e)
 
-	predict_match(model)
+	predict_match(model, model_name, stage)
+	create_rolling_feature_metrics(model_name, model_id, stage)
+	create_matches_insertion_graph()
+	create_correlation_matrix(model_name, model_id)
+	
 
 if __name__ == "__main__":
   main()

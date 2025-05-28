@@ -3,7 +3,7 @@ import './ModelPerformance.css';
 import { fetchModelMetrics, fetchMatchPredictionStats, computeRocAuc } from '../assets/util/matches';
 
 
-const ModelPerformance = () => {
+const ModelPerformance = ({model}) => {
   const [trainingMetrics, setTrainingMetrics] = useState();
   const [liveMetrics, setLiveMetrics] = useState();
   const [calculatedMetrics, setCalculatedMetrics] = useState();
@@ -15,7 +15,7 @@ const ModelPerformance = () => {
 
   useEffect(() => {
     const loadModelMetric = async () => {
-      const metric = await fetchModelMetrics("logistic regression", "2025-05-19");
+      const metric = await fetchModelMetrics(model);
       setTrainingMetrics(metric[0]);
     };
 
@@ -106,7 +106,8 @@ const ModelPerformance = () => {
       padding: "1rem",
       paddingLeft: "3rem",
       paddingRight: "3rem",
-      minWidth: "2rem"
+      minWidth: "1.75rem",
+      height: "2.5rem"
     };
   };
 
@@ -115,7 +116,6 @@ const ModelPerformance = () => {
       <div className='performance-header'>
         <p>Model Performance</p>
         <div>
-          <label></label>
           <select value={selectedMetricType} onChange={selectMetricType}>
             <option value="Training">Training</option>
             <option value="Live">Live</option>
@@ -152,7 +152,7 @@ const ModelPerformance = () => {
       ) : (<div></div>)}
         <div className='performance-grid-container'>
           <div className='confusion-matrix-container'>
-            <p>{selectedMetricType} Data Confusion Matrix</p>
+            <p className='performance-grid-subtitle'>{selectedMetricType} Data Confusion Matrix</p>
             <div className='confusion-matrix-table-container'>
               <table className='confusion-matrix-table'>
                 <thead>
@@ -166,12 +166,12 @@ const ModelPerformance = () => {
                   selectedMetricType == "Training" ? (
                     <tbody>
                       <tr>
-                        <th>0</th>
+                        <th style={{paddingRight: "0.5rem"}}>0</th>
                         <td style={getMatrixCellStyle(trainingMetrics.t_neg)}>{trainingMetrics.t_neg}</td>
                         <td style={getMatrixCellStyle(trainingMetrics.f_pos)}>{trainingMetrics.f_pos}</td>
                       </tr>
                       <tr>
-                        <th>1</th>
+                        <th style={{paddingRight: "0.5rem"}}>1</th>
                         <td style={getMatrixCellStyle(trainingMetrics.f_neg)}>{trainingMetrics.f_neg}</td>
                         <td style={getMatrixCellStyle(trainingMetrics.t_pos)}>{trainingMetrics.t_pos}</td>
                       </tr>
@@ -196,14 +196,24 @@ const ModelPerformance = () => {
           </div>
         </div>
         <div className='class-representation-container'>
-          <img src="/images/lr_training_class_representation_bar_graph.png"/>
+          <p className='performance-grid-subtitle'>Class Representation Graph</p>
+          <img src={`/images/${model}_${selectedMetricType}_class_representation_bar_graph.png`}/>
         </div>
         <div className='class-seperation-quality-container'>
-          <img src="/images/lr_training_class_seperation_quality_plot.png"/>
+          <p className='performance-grid-subtitle'>Class Seperation Plot</p>
+          <img src={`/images/${model}_${selectedMetricType}_class_seperation_quality_plot.png`}/>
         </div>
-        <div className=''>
-
-        </div>
+        {selectedMetricType == "Training" ? (
+          <div className='accuracy-graph-container'>
+            <p className='performance-grid-subtitle'>Cumulative Accuracy Over Matches</p>
+            <img src={`/images/${model}_Training_cumm_accuracy_graph.png`}/>
+          </div>
+        ) : (
+          <div className='accuracy-graph-container'>
+            <p className='performance-grid-subtitle'>Rolling Accuracy Over Matches (Window Size: 10)</p>
+            <img src={`/images/${model}_Live_rolling_accuracy_graph.png`}/>
+          </div>
+        )}
       </div>
     </div>
   );

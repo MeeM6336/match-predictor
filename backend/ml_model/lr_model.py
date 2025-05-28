@@ -7,9 +7,10 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import train_test_split, GridSearchCV
 from sklearn.metrics import confusion_matrix, accuracy_score, f1_score, precision_score, recall_score, log_loss, roc_auc_score
-from ml_util import getDateStamp, save_object, db_insert_feature_vector, db_connect, create_class_seperation_quality_plot, create_class_representation_bar_graph
+from ml_util import getDateStamp, save_object, db_insert_feature_vector, db_connect, create_class_seperation_quality_plot, create_class_representation_bar_graph, create_cumm_accuracy_graph, create_rolling_accuracy_graph
 
 def lr_train_model(matches):
+    model_id = 1
     db = db_connect()
     cursor = db.cursor()
 
@@ -49,7 +50,7 @@ def lr_train_model(matches):
     match_ids = matches[:, -1]
     for match_id, features in zip(match_ids, X):
         try:
-            db_insert_feature_vector(cursor, match_id, "training", features)
+            db_insert_feature_vector(cursor, match_id, "training", features, model_id)
             db.commit()
         except Exception as e:
             print("Error inserting training feature vector:", e)
@@ -58,10 +59,11 @@ def lr_train_model(matches):
     db.close()
 
 
-def evaluate_model(model, test_data):
+def evaluate_model(model, test_data, model_name):
     print("Starting model evalutation")
     model = joblib.load(model)
     data = np.load(test_data)
+    stage = "Training"
     
     X_test, y_test = data['X_test'], data['y_test']
 
@@ -91,13 +93,13 @@ def evaluate_model(model, test_data):
     with open(metrics_path, "w") as f:
         json.dump(results, f, indent=4)
     
-    plot_path = Path(__file__).resolve().parent / f"lr_model_data/lr_training_class_seperation_quality_plot.png"
-    plot_path.parent.mkdir(parents=True, exist_ok=True)
-    create_class_seperation_quality_plot(y_test, y_prob, plot_path)
+    create_class_seperation_quality_plot(y_test, y_prob, model_name, stage)
 
-    graph_path = Path(__file__).resolve().parent / f"lr_model_data/lr_training_class_representation_bar_graph.png"
-    graph_path.parent.mkdir(parents=True, exist_ok=True)
-    create_class_representation_bar_graph(y_pred, graph_path)
+    create_class_representation_bar_graph(y_pred, model_name, stage)
+
+    create_cumm_accuracy_graph(y_pred, y_test, model_name, stage)
+
+    create_rolling_accuracy_graph(y_pred, y_test, model_name, stage)
 
     print("Finished model evaluation")
 

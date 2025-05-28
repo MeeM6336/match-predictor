@@ -2,33 +2,63 @@ import axios from 'axios'
 
 export const fetchUpcomingMatches =  async() => {
     try {
-        const response = await axios.get('http://localhost:3000/upcoming');
-        return response.data;
+      const response = await axios.get('http://localhost:3000/upcoming');
+      return response.data;
     } catch(err) {
-        console.log('Error getting upcoming matches: ', err.message);
-        return [];
-    }
-}
+      console.log('Error getting upcoming matches: ', err.message);
+      return [];
+    };
+};
 
 export const fetchMatchPredictionStats = async() => {
     try {
-        const response = await axios.get('http://localhost:3000/upcomingstats');
-        return response.data;
+      const response = await axios.get('http://localhost:3000/upcomingstats');
+      return response.data;
     } catch(err) {
-        console.log('Error getting match predicition stats: ', err.message);
-        return [];
-    }
+      console.log('Error getting match predicition stats: ', err.message);
+      return [];
+    };
+};
+
+export const fetchModelMetrics = async (modelName) => {
+    try {
+      const response = await axios.get(`http://localhost:3000/metrics/${modelName}`);
+      return response.data;
+    } catch(err) {
+      console.log('Error getting model metrics: ', err.message);
+      return [];
+    };
+};
+
+export const fetchFeatureVectors = async () => {
+  try {
+    const response = await axios.get("http://localhost:3000/livefeaturevectors");
+    return response.data;
+  } catch(err) {
+    console.log('Error feature vectors: ', err.message);
+    return [];
+  };
 }
 
-export const fetchModelMetrics = async (modelName, modelDate) => {
-    try {
-        const response = await axios.get(`http://localhost:3000/metrics/${modelName}/${modelDate}`);
-        return response.data;
-    } catch(err) {
-        console.log('Error getting model metrics: ', err.message);
-        return [];
-    }
-}
+export const fetchTrainingDatasetStats = async () => {
+  try {
+    const response = await axios.get('http://localhost:3000/trainingdatasetstats');
+    return response.data;
+  } catch(err) {
+    console.log('Error getting training dataset stats: ', err.message);
+      return [];
+  };
+};
+
+export const fetchLiveDatasetStats = async () => {
+  try {
+    const response = await axios.get('http://localhost:3000/livedatasetstats');
+    return response.data;
+  } catch(err) {
+    console.log('Error getting live dataset stats: ', err.message);
+      return [];
+  };
+};
 
 export function computeRocAuc(y_true, y_prob) {
   const data = y_true.map((label, idx) => ({ label, prob: y_prob[idx] }));
@@ -51,7 +81,7 @@ export function computeRocAuc(y_true, y_prob) {
     }
     tps.push(tp);
     fps.push(fp);
-  }
+  };
 
   const tpr = tps.map(v => v / P);
   const fpr = fps.map(v => v / N);
@@ -61,7 +91,7 @@ export function computeRocAuc(y_true, y_prob) {
     const width = fpr[i] - fpr[i - 1];
     const height = (tpr[i] + tpr[i - 1]) / 2;
     auc += width * height;
-  }
+  };
 
   return auc;
-}
+};

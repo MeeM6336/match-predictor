@@ -17,3 +17,7 @@ backend/downloaded_files
 .env
 
 .gitignore
+
+# Auto-gen assets
+frontend/public/images/
+frontend/public/data/

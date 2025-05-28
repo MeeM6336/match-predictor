@@ -99,20 +99,104 @@ cron.schedule('0 1 * * 1', () => {
   });
 });
 
-app.get('/metrics/:name/:date', (req, res) => {
+// Route to get machine learning model metrics
+app.get('/metrics/:name', (req, res) => {
   const modelName = decodeURIComponent(req.params.name);
-  const modelDate = decodeURIComponent(req.params.date);
-  const query = 'SELECT * FROM model_metrics WHERE model_name = ? AND date = ?'
-  db.query(query, [modelName, modelDate], (err, result) => {
+  const query = 'SELECT * FROM model WHERE model_name = ?';
+  db.query(query, [modelName], (err, result) => {
     if (err){
       console.log(err);
-      res.status(500).send("Server error");
+      return res.status(500).send("Server error");
 
     } else {
-      res.json(result);
+      return res.json(result);
+    };
+  });
+});
+
+// Route to get all of dataset's feature vectors
+app.get('/livefeaturevectors', (req, res) => {
+  const query = `SELECT * FROM live_feature_vectors`;
+
+  db.query(query, (err, result) => {
+    if (err) {
+      console.error(err);
+      return res.status(500).send("Server error");
     }
-  })
-})
+    return res.json(result);
+  });
+});
+
+
+// Route to get training dataset stats
+app.get('/trainingdatasetstats', (req, res) => {
+  const matchCountQuery = `SELECT
+    (SELECT COUNT(*) FROM cs2_data.matches) AS match_row_count,
+    (SELECT MIN(date) FROM cs2_data.matches) as min_date,
+    (SELECT MAX(date) FROM CS2_data.matches) as max_date
+    `;
+  const featureStatsQuery = `SELECT
+    (SELECT COUNT(*) FROM cs2_data.feature_vectors) AS feature_row_count,
+    (SELECT COUNT(*) FROM information_schema.columns 
+    WHERE table_schema = 'cs2_data' AND table_name = 'feature_vectors') AS feature_count
+  `;
+  db.query(matchCountQuery, (err, matchStatsResults) => {
+    if (err) {
+      console.error(err);
+      return res.status(500).send("Server error");
+    };
+
+    db.query(featureStatsQuery, (err, featureStatsResults) => {
+      if (err) {
+        console.error(err);
+        return res.status(500).send("Server error");
+      };
+      
+      res.json({
+        match_row_count: matchStatsResults[0].match_row_count,
+        match_min_date: matchStatsResults[0].min_date,
+        match_max_date: matchStatsResults[0].max_date,
+        feature_row_count: featureStatsResults[0].feature_row_count,
+        feature_count: featureStatsResults[0].feature_count
+      });
+    });
+  });
+});
+
+// Route to get live dataset stats
+app.get('/livedatasetstats', (req, res) => {
+  const matchCountQuery = `SELECT
+    (SELECT COUNT(*) FROM cs2_data.upcoming_matches) AS match_row_count,
+    (SELECT MIN(date) FROM cs2_data.upcoming_matches) as min_date,
+    (SELECT MAX(date) FROM CS2_data.upcoming_matches) as max_date
+    `;
+  const featureStatsQuery = `SELECT
+    (SELECT COUNT(*) FROM cs2_data.live_feature_vectors) AS feature_row_count,
+    (SELECT COUNT(*) FROM information_schema.columns 
+    WHERE table_schema = 'cs2_data' AND table_name = 'live_feature_vectors') AS feature_count
+  `;
+  db.query(matchCountQuery, (err, matchStatsResults) => {
+    if (err) {
+      console.error(err);
+      return res.status(500).send("Server error");
+    };
+
+    db.query(featureStatsQuery, (err, featureStatsResults) => {
+      if (err) {
+        console.error(err);
+        return res.status(500).send("Server error");
+      };
+      
+      res.json({
+        match_row_count: matchStatsResults[0].match_row_count,
+        match_min_date: matchStatsResults[0].min_date,
+        match_max_date: matchStatsResults[0].max_date,
+        feature_row_count: featureStatsResults[0].feature_row_count,
+        feature_count: featureStatsResults[0].feature_count
+      });
+    });
+  });
+});
 
 // Route to get recent matches
 app.get('/upcoming', (req, res) => {
@@ -120,21 +204,22 @@ app.get('/upcoming', (req, res) => {
   db.query(query, (err, result) => {
     if (err) {
       console.error(err);
-      res.status(500).send("Server error");
+      return res.status(500).send("Server error");
     } else {
-      res.json(result);
+      return res.json(result);
     }
   });
 });
 
+// Route to get stats for recent matches
 app.get('/upcomingstats', (req, res) => {
   const query = 'SELECT outcome, actual_outcome, confidence FROM upcoming_matches WHERE outcome IS NOT NULL and actual_outcome IS NOT NULL'
   db.query(query, (err, result) => {
     if (err) {
       console.error(err);
-      res.status(500).send("Server error");
+      return res.status(500).send("Server error");
     } else {
-      res.json(result);
+      return res.json(result);
     }
   });
 });

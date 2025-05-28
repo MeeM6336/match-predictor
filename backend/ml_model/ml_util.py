@@ -87,7 +87,7 @@ def get_team_ranking(cursor, team_name):
 	return result[0] if result else None
 
 
-def create_class_seperation_quality_plot(y_true, y_prob, path):
+def create_class_seperation_quality_plot(y_true, y_prob, model_name, stage):
 	plt.figure(figsize=(8, 4.5))
 	length = len(y_prob)
 	xmin = length * (-1)
@@ -110,17 +110,16 @@ def create_class_seperation_quality_plot(y_true, y_prob, path):
   ]
 
 	plt.legend(handles=legend_elements, loc='lower right')
-
 	plt.tight_layout()
-	
-	try:
-		plt.savefig(path)
-	except Exception as e:
-		print(f"Failed to save plot: {e}")
+
+	path = Path(__file__).resolve().parent.parent.parent / f"frontend/public/images/{model_name}_{stage}_class_seperation_quality_plot.png"
+	path.parent.mkdir(parents=True, exist_ok=True)
+
+	plt.savefig(path)
 	plt.close()
 
 
-def create_class_representation_bar_graph(y_pred, path):
+def create_class_representation_bar_graph(y_pred, model_name, stage):
 	plt.figure(figsize=(8, 4.5))
 	zero = 0 
 	one = 0
@@ -136,8 +135,207 @@ def create_class_representation_bar_graph(y_pred, path):
 	plt.ylabel("Class Frequency")
 	plt.tight_layout()
 
+	path = Path(__file__).resolve().parent.parent.parent / f"frontend/public/images/{model_name}_{stage}_class_representation_bar_graph.png"
+	path.parent.mkdir(parents=True, exist_ok=True)
+
 	plt.savefig(path)
 	plt.close()
+
+
+def create_cumm_accuracy_graph(y_pred, y_true, model_name, stage):
+	y_true_np = np.array(y_true)
+	y_pred_np = np.array(y_pred)
+	num_matches = len(y_true)
+	match_indices = np.arange(1, num_matches + 1)
+	is_correct = (y_true_np == y_pred_np).astype(int)
+	cumulative_correct = np.cumsum(is_correct)
+	cumulative_accuracy = cumulative_correct / match_indices
+
+	plt.figure(figsize=(8, 4.5))
+	plt.plot(match_indices, cumulative_accuracy, 'b-', linewidth=2, label='Cumulative Accuracy')
+	plt.xlabel('Match Number')
+	plt.ylabel('Accuracy')
+	plt.ylim(0, 1)
+	plt.grid(True, linestyle='--', alpha=0.7)
+	plt.axhline(y=np.mean(is_correct), color='r', linestyle='--', label=f'Overall Accuracy: {np.mean(is_correct):.2f}')
+	plt.legend()
+	plt.tight_layout()
+
+	path = Path(__file__).resolve().parent.parent.parent / f"frontend/public/images/{model_name}_{stage}_cumm_accuracy_graph.png"
+	path.parent.mkdir(parents=True, exist_ok=True)
+
+	plt.savefig(path)
+	plt.close()
+
+
+def create_rolling_accuracy_graph(y_pred, y_true, model_name, stage):
+	window_size = 10
+	y_true_np = np.array(y_true)
+	y_pred_np = np.array(y_pred)
+	num_matches = len(y_true)
+	match_indices = np.arange(1, num_matches + 1)
+	is_correct = (y_true_np == y_pred_np).astype(int)
+
+	rolling_accuracy = pd.Series(is_correct).rolling(window=window_size).mean()
+
+	plt.figure(figsize=(8, 4.5))
+	plt.plot(match_indices[window_size-1:], rolling_accuracy[window_size-1:], 'b-', linewidth=2, label=f'Rolling Accuracy (Window={window_size})')
+	plt.xlabel('Match Number')
+	plt.ylabel('Accuracy')
+	plt.ylim(0, 1)
+	plt.grid(True, linestyle='--', alpha=0.7)
+	plt.axhline(y=np.mean(is_correct), color='r', linestyle='--', label=f'Overall Accuracy: {np.mean(is_correct):.2f}')
+	plt.legend()
+	plt.tight_layout()
+
+	path = Path(__file__).resolve().parent.parent.parent / f"frontend/public/images/{model_name}_{stage}_rolling_accuracy_graph.png"
+	path.parent.mkdir(parents=True, exist_ok=True)
+
+	plt.savefig(path)
+	plt.close()
+
+
+def create_rolling_feature_metrics(model_name, model_id, stage):
+	db = db_connect()
+	cursor = db.cursor(dictionary=True)
+	try:
+		query = """
+			SELECT 
+				live_feature_vectors.tournament_type, 
+				live_feature_vectors.best_of, 
+				live_feature_vectors.ranking_diff, 
+				live_feature_vectors.hth_wins_diff, 
+				live_feature_vectors.rating_diff, 
+				live_feature_vectors.KDA_diff, 
+				live_feature_vectors.KAST_diff, 
+				live_feature_vectors.ADR_diff,
+				upcoming_matches.date
+			FROM live_feature_vectors JOIN upcoming_matches ON live_feature_vectors.match_id=upcoming_matches.match_id WHERE model_id=%s
+			ORDER BY 
+				upcoming_matches.date DESC
+		"""
+
+		cursor.execute(query, (model_id,))
+		features = cursor.fetchall()
+	except Exception as e:
+		print("Error fetching feature vectors:", e)
+		return None
+
+	df = pd.DataFrame(features)
+	df['date'] = pd.to_datetime(df['date'])
+	df = df.set_index('date')
+	df = df.sort_index()
+	
+	rolling_window = '15D'
+	numerical_features = ['tournament_type', 'best_of', 'ranking_diff', 'hth_wins_diff', 'rating_diff', 'KDA_diff', 'KAST_diff', 'ADR_diff']
+
+	for feature in numerical_features:
+		plt.figure(figsize=(12, 6))
+
+		df_feature_rolling_mean = df[feature].rolling(window=rolling_window, min_periods=1).mean()
+		df_feature_rolling_median = df[feature].rolling(window=rolling_window, min_periods=1).median()
+		df_feature_rolling_std = df[feature].rolling(window=rolling_window, min_periods=1).std()
+
+		plt.plot(df.index, df[feature], alpha=0.3, label=f'{feature} Raw', marker='.', linestyle='None')
+
+		plt.plot(df.index, df_feature_rolling_mean, label=f'{feature} Rolling Mean ({rolling_window})', color='blue', linewidth=1.5)
+		plt.plot(df.index, df_feature_rolling_median, label=f'{feature} Rolling Median ({rolling_window})', color='green', linestyle='--', linewidth=1.5)
+		plt.plot(df.index, df_feature_rolling_std, label=f'{feature} Rolling Std Dev ({rolling_window})', color='red', linestyle=':', linewidth=1.5)
+
+		plt.ylabel(feature)
+		plt.xlabel('Date')
+		plt.grid(True, linestyle='--', alpha=0.7)
+		plt.xticks(rotation=45)
+		plt.legend(loc='best', fontsize='small')
+		plt.gcf().autofmt_xdate()
+		
+		plt.tight_layout()
+
+		path = Path(__file__).resolve().parent.parent.parent / f"frontend/public/images/{model_name}_{stage}_rolling_stats_{feature}.png"
+		path.parent.mkdir(parents=True, exist_ok=True)
+
+		plt.savefig(path)
+		
+		plt.close()
+
+	db.close()
+
+def create_matches_insertion_graph():
+	db = db_connect()
+	cursor = db.cursor()
+	try:
+		query = """
+			SELECT 
+				date
+			FROM upcoming_matches 
+			WHERE
+				OUTCOME IS NOT NULL
+		"""
+
+		cursor.execute(query)
+		dates = cursor.fetchall()
+
+	except Exception as e:
+		print("Error fetching feature vectors:", e)
+		return None
+	
+	date_counts = {}
+
+	for (dt,) in dates:
+		only_date = dt.date()
+		date_counts[only_date] = date_counts.get(only_date, 0) + 1
+
+	sorted_counts = dict(sorted(date_counts.items()))
+	dates = list(sorted_counts.keys())
+	counts = list(list(sorted_counts.values()))
+
+	plt.figure(figsize=(8, 4.5))
+	plt.plot(dates, counts, marker='o', color='blue', linewidth=1.5)
+	plt.xlabel('Date')
+	plt.ylabel('Count')
+	plt.grid(True)
+	plt.xticks(rotation=45)
+	plt.tight_layout()
+
+	path = Path(__file__).resolve().parent.parent.parent / f"frontend/public/images/Live_match_insertions.png"
+	path.parent.mkdir(parents=True, exist_ok=True)
+
+	plt.savefig(path)
+	
+	plt.close()
+	db.close()
+	
+
+def create_correlation_matrix(model_name, model_id): # Need to refactor for different models
+	db = db_connect()
+	cursor = db.cursor(dictionary=True)
+	try:
+		query = """
+			SELECT 
+				tournament_type, 
+				best_of, 
+				ranking_diff, 
+				hth_wins_diff, 
+				rating_diff, 
+				KDA_diff, 
+				KAST_diff, 
+				ADR_diff
+			FROM feature_vectors WHERE model_id = %s
+		"""
+
+		cursor.execute(query, (model_id,))
+		features = cursor.fetchall()
+	except Exception as e:
+		print("Error fetching feature vectors:", e)
+		return None
+
+	df = pd.DataFrame(features)
+	spearman_corr_matrix = df.corr(method='spearman')
+
+	path = Path(__file__).resolve().parent.parent.parent / f"frontend/public/data/{model_name}_Live_spearman_corr_matrix.json"
+	path.parent.mkdir(parents=True, exist_ok=True)
+
+	spearman_corr_matrix.to_json(path, orient='index', indent=4)
 
 
 def get_past_stats(cursor, team_name, match_date):
@@ -182,23 +380,23 @@ def get_past_stats(cursor, team_name, match_date):
 	return past_stats
 	
 
-def db_insert_feature_vector(cursor, match_id, source, match):
+def db_insert_feature_vector(cursor, match_id, source, match, model_id):
 	if source == "training":
 		query = """
 		INSERT INTO feature_vectors (
-				match_id, best_of, tournament_type, ranking_diff, hth_wins_diff,
+				match_id, model_id, best_of, tournament_type, ranking_diff, hth_wins_diff,
 				rating_diff, KDA_diff, KAST_diff, ADR_diff
-		) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+		) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
 		"""
 	elif source == "live":
 		query = """
 		INSERT INTO live_feature_vectors (
-				match_id, best_of, tournament_type, ranking_diff, hth_wins_diff,
+				match_id, model_id, best_of, tournament_type, ranking_diff, hth_wins_diff,
 				rating_diff, KDA_diff, KAST_diff, ADR_diff
-		) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+		) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
 		"""
 	
-	cursor.execute(query, (match_id,*match))
+	cursor.execute(query, (match_id, model_id,*match))
 
 
 def process_matches():
