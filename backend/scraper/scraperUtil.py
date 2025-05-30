@@ -8,20 +8,21 @@ def load_teams(cursor):
     query = """
         SELECT id, team_name
         FROM teams
-        WHERE ranking > 15 # Need to change l8r
+        WHERE ranking > 15
         ORDER BY ranking ASC
         LIMIT 50;
     """
-
+    # Need to change l8r?
     cursor.execute(query)
     return cursor.fetchall()
 
 
-def get_dates():
-    date_now = datetime.now().strftime('%Y-%m-%d')
-    date_ago = (datetime.now() - timedelta(days=365)).strftime('%Y-%m-%d')
+def get_date_range(date, delta):
+    dt = datetime.strptime(date, '%Y-%m-%d %H:%M:%S')
+    date_end = dt.strftime('%Y-%m-%d')
+    date_start = (dt - timedelta(days=delta)).strftime('%Y-%m-%d')
 
-    return (date_now, date_ago)
+    return (date_end, date_start)
 
 
 def cookie_accept(driver):

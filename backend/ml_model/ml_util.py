@@ -44,40 +44,41 @@ def getDateStamp():
 
 # Used in live match prediction to get all hth lineups
 def get_hth_wins(cursor, team_a, team_b):
-    query = """
-    SELECT
-        team,
-        COUNT(*) AS wins
-    FROM (
-        SELECT
-            CASE
-                WHEN outcome = 1 THEN team_a
-                ELSE team_b
-            END AS team
-        FROM matches
-        WHERE
-            (team_a = %s AND team_b = %s) OR
-            (team_a = %s AND team_b = %s)
-    ) AS hth
-    GROUP BY team;
-    """
-    cursor.execute(query, (team_a, team_b, team_b, team_a))
-    results = cursor.fetchall()
+	query = """
+	SELECT
+			team,
+			COUNT(*) AS wins
+	FROM (
+			SELECT
+					CASE
+							WHEN outcome = 1 THEN team_a
+							ELSE team_b
+					END AS team
+			FROM matches
+			WHERE
+					(team_a = %s AND team_b = %s) OR
+					(team_a = %s AND team_b = %s)
+	) AS hth
+	GROUP BY team;
+	"""
+	cursor.execute(query, (team_a, team_b, team_b, team_a))
+	results = cursor.fetchall()
 
-    # Initialize wins dict
-    wins = {team_a: 0, team_b: 0}
+	# Initialize wins dict
+	wins = {team_a: 0, team_b: 0}
 
-    for row in results:
-        team, count = row
-        wins[team] = count
-
-    return (wins[team_a], wins[team_b])
+	for row in results:
+			team, count = row
+			wins[team] = count
 
 
-def get_team_ranking(cursor, team_name):
+	return (wins[team_a], wins[team_b])
+
+
+def get_team_ranking(cursor, team_name, date):
 	query = """
 	SELECT ranking 
-		FROM teams
+		FROM team_stats_by_date
 		WHERE team_name = %s
 	"""
 
@@ -87,6 +88,278 @@ def get_team_ranking(cursor, team_name):
 	return result[0] if result else None
 
 
+def get_team_stats_by_date(cursor, team_name, date):
+	query = """
+	SELECT 
+		ranking, 
+		round_wr, 
+		opening_kill_rate, 
+		multikill_rate, 
+		5v4_wr, 
+		4v5_wr, 
+		trade_rate, 
+		utility_adr, 
+		flash_assists, 
+		pistol_wr, 
+		round2_conv, 
+		round2_break
+	FROM team_stats_by_date
+		WHERE team_name = %s
+	ORDER BY ABS(TIMESTAMPDIFF(SECOND, date, %s))
+    LIMIT 1
+	"""
+	cursor.execute(query, (team_name, date))
+	result = cursor.fetchone()
+
+	return result
+
+
+def get_past_stats(cursor, team_name, match_date):
+	query = """
+		SELECT 
+			AVG(team_rating) AS team_rating,
+			AVG(avg_kda) AS avg_kda,
+			AVG(avg_kast) AS avg_kast,
+			AVG(avg_adr) AS avg_adr
+		FROM (
+			SELECT * FROM (
+				SELECT 
+					match_id, 
+					team_a_rating AS team_rating, 
+					team_a_kda AS avg_kda, 
+					team_a_kast AS avg_kast, 
+					team_a_adr AS avg_adr,
+					date
+				FROM matches
+				WHERE team_a = %s AND match_id < %s
+
+				UNION ALL
+
+				SELECT 
+					match_id, 
+					team_b_rating AS team_rating, 
+					team_b_kda AS avg_kda, 
+					team_b_kast AS avg_kast, 
+					team_b_adr AS avg_adr,
+					date
+				FROM matches
+				WHERE team_b = %s AND match_id < %s
+			) AS team_matches
+			ORDER BY date DESC
+			LIMIT 10
+		) AS last_10_matches;
+	"""
+
+	cursor.execute(query, (team_name, match_date, team_name, match_date))
+	past_stats = cursor.fetchone()
+	
+	return past_stats
+	
+
+def db_insert_feature_vector(cursor, match_id, source, match, model_id):
+	if source == "training":
+		query = """
+		INSERT INTO feature_vectors (
+				match_id, model_id, best_of, tournament_type, ranking_diff, hth_wins_diff,
+				rating_diff, KDA_diff, KAST_diff, ADR_diff
+		) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+		"""
+	elif source == "live":
+		query = """
+		INSERT INTO live_feature_vectors (
+				match_id, model_id, best_of, tournament_type, ranking_diff, hth_wins_diff,
+				rating_diff, KDA_diff, KAST_diff, ADR_diff
+		) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+		"""
+	
+	cursor.execute(query, (match_id, model_id,*match))
+
+
+def process_matches():
+	print("Beginning to process matches...")
+	db = db_connect()
+	cursor = db.cursor()
+
+	query = """
+	SELECT 
+		match_id, 
+		date, 
+		tournament_type, 
+		best_of, 
+		team_a,
+		team_b,
+		outcome 
+	FROM matches
+	ORDER BY date asc
+	"""
+	cursor.execute(query)
+	matches = cursor.fetchall()
+
+	list_features = []
+	hth_record = defaultdict(int)
+
+	# Match stats should be ideally in the format (tournament_type, best_of, ranking_diff, hth_diff, rating_diff, KDA_diff, KAST_diff, ADR_diff, label, match_id) 
+	# where label is 1 if teamA wins and 0 if teamA loses
+	for match in matches:
+		match_id = match[0]
+		match_date = match[1]
+		tournament_type = match[2]
+		best_of = match[3]
+		a_team = match[4]
+		b_team = match[5]
+		match_outcome = match[6]
+
+		a_ranking = get_team_ranking(cursor, a_team)
+		b_ranking = get_team_ranking(cursor, b_team)
+
+		team_a_stats = get_past_stats(cursor, a_team, match_date)
+		team_b_stats = get_past_stats(cursor, b_team, match_date)
+
+		if (a_ranking == None or b_ranking == None or team_a_stats[0] == None or team_b_stats[0] == None):
+			continue
+
+		ranking_diff = a_ranking - b_ranking
+		ranking_diff = math.copysign(math.log(abs(ranking_diff) + 1), ranking_diff)
+
+		aHthWins = hth_record[(a_team, b_team)]
+		bHthWins = hth_record[(b_team, a_team)]
+
+		hth_diff = aHthWins - bHthWins
+		
+		rating_diff = team_a_stats[0] - team_b_stats[0]
+		KDA_diff = team_a_stats[1] - team_b_stats[1]
+		KAST_diff = team_a_stats[2] - team_b_stats[2]
+		ADR_diff = team_a_stats[3] - team_b_stats[3]
+
+
+		# Append aggregate stats
+		x = [
+			tournament_type, best_of, ranking_diff, hth_diff,
+			rating_diff, KDA_diff, KAST_diff, ADR_diff,
+			match_outcome, match_id
+		]
+
+		# Checks for any null values
+		if any(val is None for val in x):
+			continue
+
+		if match_outcome == 1:
+			hth_record[(a_team, b_team)] += 1
+		else:
+			hth_record[(b_team, a_team)] += 1
+
+		list_features.append(x)
+
+	cursor.close()
+	db.close()
+
+	return list_features
+
+
+def process_matches_nn():
+	print("Beginning to process matches...")
+	db = db_connect()
+	cursor = db.cursor(dictionary=True)
+
+	query = """
+	SELECT 
+		match_id, 
+		date, 
+		tournament_type, 
+		best_of, 
+		team_a,
+		team_b,
+		outcome 
+	FROM matches
+	ORDER BY date asc
+	"""
+
+	cursor.execute(query)
+	rows = cursor.fetchall()
+	df = pd.DataFrame(rows)
+
+	# Initialize feature columns
+	new_columns = [
+    'ranking_diff', 'rating_diff', 'KDA_diff', 'KAST_diff', 'ADR_diff',
+    'round_wr_diff', 'opening_kill_rate_diff', 'multikill_rate_diff',
+    '5v4_wr_diff', '4v5_wr_diff', 'trade_rate_diff', 'utility_adr_diff',
+    'flash_assists_diff', 'pistol_wr_diff', 'round2_conv_diff',
+    'round2_break_diff', 'hth_wins_diff'
+	]
+
+	for col in new_columns:
+		df[col] = None
+
+	hth_record = defaultdict(int)
+
+	for idx, row in df.iterrows():
+		a_team = row['team_a']
+		b_team = row['team_b']
+		match_date = row['date']
+
+		team_a_stats = get_team_stats_by_date(cursor, a_team, match_date)
+		team_b_stats = get_team_stats_by_date(cursor, b_team, match_date)
+
+		team_a_player_stats = get_past_stats(cursor, a_team, match_date)
+		team_b_player_stats = get_past_stats(cursor, b_team, match_date)
+
+		aHthWins = hth_record[(a_team, b_team)]
+		bHthWins = hth_record[(b_team, a_team)]
+
+		try:
+			ranking_diff = team_a_stats['ranking'] - team_b_stats['ranking']
+			ranking_diff = math.copysign(math.log(abs(ranking_diff) + 1), ranking_diff)
+			round_wr_diff = team_a_stats['round_wr'] - team_b_stats['round_wr']
+			opening_kill_rate_diff = team_a_stats['opening_kill_rate'] - team_b_stats['opening_kill_rate']
+			multikill_rate_diff = team_a_stats['multikill_rate'] - team_b_stats['multikill_rate']
+			_5v4_wr_diff = team_a_stats['5v4_wr'] - team_b_stats['5v4_wr']
+			_4v5_wr_diff = team_a_stats['4v5_wr'] - team_b_stats['4v5_wr']
+			trade_rate_diff = team_a_stats['trade_rate'] - team_b_stats['trade_rate']
+			utility_adr_diff = team_a_stats['utility_adr'] - team_b_stats['utility_adr']
+			flash_assists_diff = team_a_stats['flash_assists'] - team_b_stats['flash_assists']
+			pistol_wr_diff = team_a_stats['pistol_wr'] - team_b_stats['pistol_wr']
+			round2_conv_diff = team_a_stats['round2_conv'] - team_b_stats['round2_conv']
+			round2_break_diff = team_a_stats['round2_break'] - team_b_stats['round2_break']
+			rating_diff = team_a_player_stats['team_rating'] - team_b_player_stats['team_rating']
+			KDA_diff = team_a_player_stats['avg_kda'] - team_b_player_stats['avg_kda']
+			KAST_diff = team_a_player_stats['avg_kast'] - team_b_player_stats['avg_kast']
+			ADR_diff = team_a_player_stats['avg_adr'] - team_b_player_stats['avg_adr']
+			hth_diff = aHthWins - bHthWins
+
+			df.at[idx, 'ranking_diff'] = ranking_diff
+			df.at[idx, 'rating_diff'] = rating_diff
+			df.at[idx, 'KDA_diff'] = KDA_diff
+			df.at[idx, 'KAST_diff'] = KAST_diff
+			df.at[idx, 'ADR_diff'] = ADR_diff
+			df.at[idx, 'round_wr_diff'] = round_wr_diff
+			df.at[idx, 'opening_kill_rate_diff'] = opening_kill_rate_diff
+			df.at[idx, 'multikill_rate_diff'] = multikill_rate_diff
+			df.at[idx, '5v4_wr_diff'] = _5v4_wr_diff
+			df.at[idx, '4v5_wr_diff'] = _4v5_wr_diff
+			df.at[idx, 'trade_rate_diff'] = trade_rate_diff
+			df.at[idx, 'utility_adr_diff'] = utility_adr_diff
+			df.at[idx, 'flash_assists_diff'] = flash_assists_diff
+			df.at[idx, 'pistol_wr_diff'] = pistol_wr_diff
+			df.at[idx, 'round2_conv_diff'] = round2_conv_diff
+			df.at[idx, 'round2_break_diff'] = round2_break_diff
+			df.at[idx, 'hth_wins_diff'] = hth_diff
+
+			if row['outcome'] == 1:
+					hth_record[(a_team, b_team)] += 1
+			elif row['outcome'] == 0:
+					hth_record[(b_team, a_team)] += 1
+
+		except TypeError as e:
+			continue
+
+	db.close()
+	cursor.close()
+
+	df = df.dropna()
+
+	return df
+	
+	
 def create_class_seperation_quality_plot(y_true, y_prob, model_name, stage):
 	plt.figure(figsize=(8, 4.5))
 	length = len(y_prob)
@@ -105,9 +378,9 @@ def create_class_seperation_quality_plot(y_true, y_prob, model_name, stage):
 	plt.grid(True)
 
 	legend_elements = [
-        Patch(facecolor='blue', label='Win'),
-        Patch(facecolor='red', label='Lose')
-  ]
+				Patch(facecolor='blue', label='Win'),
+				Patch(facecolor='red', label='Lose')
+	]
 
 	plt.legend(handles=legend_elements, loc='lower right')
 	plt.tight_layout()
@@ -336,145 +609,3 @@ def create_correlation_matrix(model_name, model_id): # Need to refactor for diff
 	path.parent.mkdir(parents=True, exist_ok=True)
 
 	spearman_corr_matrix.to_json(path, orient='index', indent=4)
-
-
-def get_past_stats(cursor, team_name, match_date):
-	query = """
-		SELECT 
-			AVG(team_rating) AS team_rating,
-			AVG(avg_kda) AS avg_kda,
-			AVG(avg_kast) AS avg_kast,
-			AVG(avg_adr) AS avg_adr
-		FROM (
-			SELECT * FROM (
-				SELECT 
-					match_id, 
-					team_a_rating AS team_rating, 
-					team_a_kda AS avg_kda, 
-					team_a_kast AS avg_kast, 
-					team_a_adr AS avg_adr,
-					date
-				FROM matches
-				WHERE team_a = %s AND match_id < %s
-
-				UNION ALL
-
-				SELECT 
-					match_id, 
-					team_b_rating AS team_rating, 
-					team_b_kda AS avg_kda, 
-					team_b_kast AS avg_kast, 
-					team_b_adr AS avg_adr,
-					date
-				FROM matches
-				WHERE team_b = %s AND match_id < %s
-			) AS team_matches
-			ORDER BY date DESC
-			LIMIT 10
-		) AS last_10_matches;
-	"""
-
-	cursor.execute(query, (team_name, match_date, team_name, match_date))
-	past_stats = cursor.fetchone()
-	
-	return past_stats
-	
-
-def db_insert_feature_vector(cursor, match_id, source, match, model_id):
-	if source == "training":
-		query = """
-		INSERT INTO feature_vectors (
-				match_id, model_id, best_of, tournament_type, ranking_diff, hth_wins_diff,
-				rating_diff, KDA_diff, KAST_diff, ADR_diff
-		) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-		"""
-	elif source == "live":
-		query = """
-		INSERT INTO live_feature_vectors (
-				match_id, model_id, best_of, tournament_type, ranking_diff, hth_wins_diff,
-				rating_diff, KDA_diff, KAST_diff, ADR_diff
-		) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-		"""
-	
-	cursor.execute(query, (match_id, model_id,*match))
-
-
-def process_matches():
-	print("Beginning to process matches...")
-	db = db_connect()
-	cursor = db.cursor()
-
-	query = """
-	SELECT 
-		match_id, 
-		date, 
-		tournament_type, 
-		best_of, 
-		team_a,
-		team_b,
-		outcome 
-	FROM matches
-	ORDER BY date asc
-	"""
-	cursor.execute(query)
-	matches = cursor.fetchall()
-
-	list_features = []
-	hth_record = defaultdict(int)
-
-	# Match stats should be ideally in the format (tournament_type, best_of, ranking_diff, hth_diff, rating_diff, KDA_diff, KAST_diff, ADR_diff, label, match_id) 
-	# where label is 1 if teamA wins and 0 if teamA loses
-	for match in matches:
-		match_id = match[0]
-		match_date = match[1]
-		tournament_type = match[2]
-		best_of = match[3]
-		a_team = match[4]
-		b_team = match[5]
-		match_outcome = match[6]
-
-		a_ranking = get_team_ranking(cursor, a_team)
-		b_ranking = get_team_ranking(cursor, b_team)
-
-		team_a_stats = get_past_stats(cursor, a_team, match_date)
-		team_b_stats = get_past_stats(cursor, b_team, match_date)
-
-		if (a_ranking == None or b_ranking == None or team_a_stats[0] == None or team_b_stats[0] == None):
-			continue
-
-		ranking_diff = a_ranking - b_ranking
-		ranking_diff = math.copysign(math.log(abs(ranking_diff) + 1), ranking_diff)
-
-		aHthWins = hth_record[(a_team, b_team)]
-		bHthWins = hth_record[(b_team, a_team)]
-
-		hth_diff = aHthWins - bHthWins
-		
-		rating_diff = team_a_stats[0] - team_b_stats[0]
-		KDA_diff = team_a_stats[1] - team_b_stats[1]
-		KAST_diff = team_a_stats[2] - team_b_stats[2]
-		ADR_diff = team_a_stats[3] - team_b_stats[3]
-
-
-		# Append aggregate stats
-		x = [
-			tournament_type, best_of, ranking_diff, hth_diff,
-			rating_diff, KDA_diff, KAST_diff, ADR_diff,
-			match_outcome, match_id
-		]
-
-		# Checks for any null values
-		if any(val is None for val in x):
-			continue
-
-		if match_outcome == 1:
-			hth_record[(a_team, b_team)] += 1
-		else:
-			hth_record[(b_team, a_team)] += 1
-
-		list_features.append(x)
-
-	cursor.close()
-	db.close()
-
-	return list_features

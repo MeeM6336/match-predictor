@@ -10,7 +10,7 @@ __pycache__/
 backend/scraper/downloaded_files
 backend/ml_model/lr_model_data
 backend/ml_model/encoder
-
+backend/scraper/__pycache__/
 backend/downloaded_files
 
 # dotenv

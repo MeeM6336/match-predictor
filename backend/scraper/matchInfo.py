@@ -66,7 +66,9 @@ def insert_series_info(cursor, match_info_df_list, match_stats_df_list, match_ty
     avg_kast_teamB = float(avg_teamB["KAST"])
 
 
-    query = "INSERT INTO matches (date, tournament, tournament_type, best_of, team_a, team_a_rating, team_a_kda, team_a_adr, team_a_kast, team_b, team_b_rating, team_b_kda, team_b_adr, team_b_kast, outcome) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
+    query = """INSERT INTO matches 
+    (date, tournament, tournament_type, best_of, team_a, team_a_rating, team_a_kda, team_a_adr, team_a_kast, team_b, team_b_rating, team_b_kda, team_b_adr, team_b_kast, outcome)
+    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"""
     val = (match_info_df_list[0]["dateTime"].iloc[0], 
         match_info_df_list[0]["tournamentName"].iloc[0], 
         series_match_type,
@@ -259,7 +261,7 @@ def main():
     cursor = db.cursor()
 
     driver = Driver(uc=True, page_load_strategy="eager", headless=True)
-    date_now, date_ago = get_dates()
+    date_now, date_ago = get_dates(delta=365)
     teams = load_teams(cursor)
     match_types = ["Majors", "BigEvents","Lan", "Online"]
 
