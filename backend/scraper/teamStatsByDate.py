@@ -72,7 +72,8 @@ def insert_team_stat(cursor, date_ago, current_date_rankings, ftu_table, pistol_
     try:
       ftu_row = ftu_table[ftu_table['Team'] == team_name].iloc[0]
       pistols_row = pistol_table[pistol_table['Team'] == team_name].iloc[0]
-    except:
+    except Exception as e:
+      print("Error:", e)
       continue
 
     query = """
@@ -109,9 +110,9 @@ def main():
   cursor = db.cursor()
   driver = Driver(uc=True, page_load_strategy="eager", headless=False)
 
-  today = "2025-05-26 00:00:00"
+  today = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-  date_now, date_ago = get_date_range(today, delta=364)
+  date_now, date_ago = get_date_range(today, delta=371)
 
   date_ago_dt = datetime.strptime(date_ago, '%Y-%m-%d')
   date_now_dt = datetime.strptime(date_now, '%Y-%m-%d')
@@ -126,8 +127,6 @@ def main():
     ftu_table = get_table_stats(driver, "ftu", date_ago_dt)
     ftu_table.columns = [col[1] for col in ftu_table.columns]
     pistol_table = get_table_stats(driver, "pistols", date_ago_dt)
-
-    
 
     try:
       insert_team_stat(cursor, date_ago_dt, current_date_rankings, ftu_table, pistol_table)

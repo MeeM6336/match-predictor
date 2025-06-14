@@ -95,7 +95,11 @@ def main():
         url = 'https://www.hltv.org/matches'
         driver.get(url)
 
-        cookie_accept(driver)
+        try:
+            cookie_accept(driver)
+        except Exception as e:
+            print("No cookies accept found/needed.")
+
         soup = BeautifulSoup(driver.page_source, 'html.parser')
 
         matches = parse_upcoming_matches(soup, driver)

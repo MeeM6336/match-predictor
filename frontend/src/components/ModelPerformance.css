@@ -1,7 +1,6 @@
 .ModelPerformance {
   min-width: 50%;
   box-shadow: 0px 0px 7px rgb(204,204,204);
-  min-height: 54vh;
 }
 
 .performance-header {
@@ -20,7 +19,7 @@
   justify-content: space-between;
   padding-left: 1rem;
   padding-right: 1rem;
-  padding-bottom: 0.5rem;
+  padding-bottom: 1rem;
 }
 
 .performance-metric {
@@ -30,7 +29,7 @@
   min-width: 15.25%;
   align-items: center;
   justify-content: center;
-  height: 4rem;
+  height: 4.5rem;
 }
 
 .performance-grid-container {
@@ -49,7 +48,7 @@
 }
 
 .performance-metric-number {
-  font-size: 1.2rem;
+  font-size: 1.4rem;
 }
 
 .performance-metric-name {
@@ -77,7 +76,7 @@
 }
 
 .class-representation-container img{
-  width: 80%;
+  width: 90%;
 }
 
 .class-seperation-quality-container {
@@ -91,7 +90,7 @@
 }
 
 .class-seperation-quality-container img{
-  width: 80%;
+  width: 90%;
 }
 
 .confusion-matrix-table-container {
@@ -127,5 +126,5 @@
 }
 
 .accuracy-graph-container img{
-  width: 80%;
+  width: 90%;
 }

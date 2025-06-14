@@ -1,46 +1,38 @@
 import React, { useState, useEffect } from 'react';
-import './RecentPredictions.css';
 import { fetchUpcomingMatches } from '../assets/util/matches';
+import './MatchPredictions.css'
 
-const RecentPredictions = ({model, onPageChange}) => {
-	const [upcomingMatchList, setUpcomingMatchList] = useState([]);
+const MatchPredictions = ({model}) => {
+  const [upcomingMatchList, setUpcomingMatchList] = useState([]);
 
-	const getDate = (dateString) => {
-		const date = new Date(dateString);
+  const getDate = (dateString) => {
+      const date = new Date(dateString);
+  
+      const localString = date.toLocaleString('en-US', {
+        timeZone: 'America/Chicago',
+        year: '2-digit',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+      });
+  
+      return localString
+    };
+  
+    useEffect(() => {
+      const loadMatches = async () => {
+        const matches = await fetchUpcomingMatches(model.model_id);
+        setUpcomingMatchList(matches);
+      };
+  
+      loadMatches();
+    }, [model?.model_id]);
 
-		const localString = date.toLocaleString('en-US', {
-			timeZone: 'America/Chicago',
-			year: '2-digit',
-			month: '2-digit',
-			day: '2-digit',
-			hour: '2-digit',
-			minute: '2-digit',
-			hour12: false,
-		});
-
-		return localString
-	};
-
-	const selectPage = (pageName) => {
-		onPageChange(pageName);
-	};
-
-	useEffect(() => {
-		const loadMatches = async () => {
-			const matches = await fetchUpcomingMatches(model.model_id);
-			setUpcomingMatchList(matches.slice(0, 40));
-		};
-
-		loadMatches();
-	}, [model?.model_id]);
-
-	return (
-		<div className='RecentPredictions'>
-			<div className='prediction-header'>
-				<p>Recent Predictions</p>
-				<a onClick={() => selectPage("Match Predictions")}>See More &gt;</a>
-			</div>
-			<div className='prediction-table-container'>
+  return (
+    <div className='MatchPredictions'>
+      <div className='full-prediction-table-container'>
 				<table className='prediction-table'>
 					<thead>
 						<tr className='prediction-table-header'>
@@ -58,7 +50,7 @@ const RecentPredictions = ({model, onPageChange}) => {
 					<tbody className='prediction-table-body'>
 						{upcomingMatchList.map((match, index) => (
 							match.model_id === model.model_id || match.model_id === null ? (
-								<tr key={match.match_id}>
+								<tr key={index}>
 									<td className={`prediction-table-team ${match.actual_outcome != null ? match.actual_outcome == 1 ? "winner" : "loser" : ""}`}>{match.team_a}</td>
 									<td className={`prediction-table-team ${match.actual_outcome != null ? match.actual_outcome == 0 ? "winner" : "loser" : ""}`}>{match.team_b}</td>
 									<td className='prediction-table-team'>{getDate(match.date)}</td>
@@ -73,8 +65,8 @@ const RecentPredictions = ({model, onPageChange}) => {
 					</tbody>
 				</table>
 			</div>
-		</div>
-	);
+    </div>
+  );
 };
 
-export default RecentPredictions;
+export default MatchPredictions;

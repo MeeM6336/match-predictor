@@ -10,6 +10,7 @@ from matplotlib.patches import Patch
 from dotenv import load_dotenv
 from pathlib import Path
 from collections import defaultdict
+from sklearn.preprocessing import StandardScaler
 
 def db_connect():
 	try:
@@ -45,22 +46,23 @@ def getDateStamp():
 # Used in live match prediction to get all hth lineups
 def get_hth_wins(cursor, team_a, team_b):
 	query = """
-	SELECT
-			team,
-			COUNT(*) AS wins
-	FROM (
-			SELECT
+    SELECT team, COUNT(*) AS wins
+			FROM (
+				SELECT
 					CASE
 							WHEN outcome = 1 THEN team_a
 							ELSE team_b
 					END AS team
-			FROM matches
-			WHERE
-					(team_a = %s AND team_b = %s) OR
-					(team_a = %s AND team_b = %s)
-	) AS hth
-	GROUP BY team;
-	"""
+				FROM (
+					SELECT team_a, team_b, outcome
+					FROM matches
+					WHERE (team_a = %s AND team_b = %s) OR (team_a = %s AND team_b = %s)
+					ORDER BY date DESC
+					LIMIT 10
+				) AS recent_matches
+			) AS hth
+		GROUP BY team;
+  """
 	cursor.execute(query, (team_a, team_b, team_b, team_a))
 	results = cursor.fetchall()
 
@@ -80,9 +82,11 @@ def get_team_ranking(cursor, team_name, date):
 	SELECT ranking 
 		FROM team_stats_by_date
 		WHERE team_name = %s
+	ORDER BY ABS(TIMESTAMPDIFF(SECOND, date, %s))
+	LIMIT 1
 	"""
 
-	cursor.execute(query, (team_name,))
+	cursor.execute(query, (team_name, date))
 	result = cursor.fetchone()
 
 	return result[0] if result else None
@@ -157,22 +161,35 @@ def get_past_stats(cursor, team_name, match_date):
 	
 
 def db_insert_feature_vector(cursor, match_id, source, match, model_id):
-	if source == "training":
-		query = """
-		INSERT INTO feature_vectors (
-				match_id, model_id, best_of, tournament_type, ranking_diff, hth_wins_diff,
-				rating_diff, KDA_diff, KAST_diff, ADR_diff
-		) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-		"""
-	elif source == "live":
-		query = """
-		INSERT INTO live_feature_vectors (
-				match_id, model_id, best_of, tournament_type, ranking_diff, hth_wins_diff,
-				rating_diff, KDA_diff, KAST_diff, ADR_diff
-		) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-		"""
-	
-	cursor.execute(query, (match_id, model_id,*match))
+	columns = [
+		"match_id", "model_id", "tournament_type", "best_of", "ranking_diff", "hth_wins_diff",
+		"rating_diff", "KDA_diff", "KAST_diff", "ADR_diff", "round_wr_diff", "opening_kill_rate_diff",
+		"multikill_rate_diff", "5v4_wr_diff", "4v5_wr_diff", "trade_rate_diff", "utility_adr_diff",
+		"flash_assists_diff", "pistol_wr_diff", "round2_conv_diff", "round2_break_diff"
+	]
+
+	table_name = "feature_vectors" if source == "training" else "live_feature_vectors"
+	placeholders = ", ".join(["%s"] * len(columns))
+	column_list = ", ".join(columns)
+	query = f"INSERT INTO {table_name} ({column_list}) VALUES ({placeholders})"
+	values = (match_id, model_id) + tuple(match)
+	padded_values = values + (None,) * (len(columns) - len(values))
+
+	cursor.execute(query, padded_values)
+
+
+def insert_model_metrics(cursor, model_name, metrics):
+	date = datetime.date.today()
+
+	query = """
+	INSERT INTO
+		model
+		(model_name, date, t_neg, f_neg, t_pos, f_pos, loss, roc_auc)
+	VALUES
+		(%s, %s, %s, %s, %s, %s, %s, %s)
+	"""
+
+	cursor.execute(query, (model_name, date, metrics['confusion_matrix'][0][0], metrics['confusion_matrix'][1][0], metrics['confusion_matrix'][1][1], metrics['confusion_matrix'][0][1], metrics['loss'], metrics['ROC AUC']))
 
 
 def process_matches():
@@ -209,8 +226,8 @@ def process_matches():
 		b_team = match[5]
 		match_outcome = match[6]
 
-		a_ranking = get_team_ranking(cursor, a_team)
-		b_ranking = get_team_ranking(cursor, b_team)
+		a_ranking = get_team_ranking(cursor, a_team, match_date)
+		b_ranking = get_team_ranking(cursor, b_team, match_date)
 
 		team_a_stats = get_past_stats(cursor, a_team, match_date)
 		team_b_stats = get_past_stats(cursor, b_team, match_date)
@@ -259,6 +276,7 @@ def process_matches():
 def process_matches_nn():
 	print("Beginning to process matches...")
 	db = db_connect()
+	scaler = StandardScaler()
 	cursor = db.cursor(dictionary=True)
 
 	query = """
@@ -345,9 +363,9 @@ def process_matches_nn():
 			df.at[idx, 'hth_wins_diff'] = hth_diff
 
 			if row['outcome'] == 1:
-					hth_record[(a_team, b_team)] += 1
+				hth_record[(a_team, b_team)] += 1
 			elif row['outcome'] == 0:
-					hth_record[(b_team, a_team)] += 1
+				hth_record[(b_team, a_team)] += 1
 
 		except TypeError as e:
 			continue
@@ -356,10 +374,55 @@ def process_matches_nn():
 	cursor.close()
 
 	df = df.dropna()
+	X = df.drop(["outcome", "match_id", "date", "team_a", "team_b"], axis=1)
+	X_scaled = scaler.fit_transform(X)
+	y = df["outcome"]
+	X_match_id = df["match_id"]
 
-	return df
+	scaler_path = Path(__file__).resolve().parent / f"nn_model_data/standard_nn_scaler.pkl"
+	save_object(scaler, scaler_path)
+
+	return X_scaled, y, X_match_id
 	
-	
+
+def plot_graphs(cursor, model_id, model_name, stage):
+	try:
+		query = """
+			SELECT
+				mp.prediction,
+				mp.confidence, 
+				um.actual_outcome
+			FROM match_predictions mp
+			JOIN upcoming_matches um ON mp.match_id = um.match_id
+			WHERE mp.model_id = %s
+		"""
+
+		cursor.execute(query, (model_id,))
+		match_outcomes = cursor.fetchall()
+
+		all_outcome = []
+		all_actual_outcomes = []
+		all_confidences = []
+
+		for outcome, confidence, actual_outcome in match_outcomes:
+			all_actual_outcomes.append(actual_outcome)
+			all_outcome.append(outcome)
+
+			if outcome == 0:
+				all_confidences.append(confidence - 0.5)
+			
+			else:
+				all_confidences.append(confidence)
+
+		create_class_seperation_quality_plot(all_actual_outcomes, all_confidences, model_name, stage)
+		create_class_representation_bar_graph(all_outcome, model_name, stage)
+		create_cumm_accuracy_graph(all_outcome, all_actual_outcomes, model_name, stage)
+		create_rolling_accuracy_graph(all_outcome, all_actual_outcomes, model_name, stage)
+
+	except Exception as e:
+		print("Error creating graphs", e)
+
+
 def create_class_seperation_quality_plot(y_true, y_prob, model_name, stage):
 	plt.figure(figsize=(8, 4.5))
 	length = len(y_prob)
@@ -490,6 +553,7 @@ def create_rolling_feature_metrics(model_name, model_id, stage):
 
 		cursor.execute(query, (model_id,))
 		features = cursor.fetchall()
+		
 	except Exception as e:
 		print("Error fetching feature vectors:", e)
 		return None
@@ -541,8 +605,6 @@ def create_matches_insertion_graph():
 			SELECT 
 				date
 			FROM upcoming_matches 
-			WHERE
-				OUTCOME IS NOT NULL
 		"""
 
 		cursor.execute(query)
@@ -579,7 +641,7 @@ def create_matches_insertion_graph():
 	db.close()
 	
 
-def create_correlation_matrix(model_name, model_id): # Need to refactor for different models
+def create_correlation_matrix(model_name, model_id):
 	db = db_connect()
 	cursor = db.cursor(dictionary=True)
 	try:

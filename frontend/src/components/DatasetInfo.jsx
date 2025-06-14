@@ -42,9 +42,9 @@ const DatasetInfo = ({model}) => {
 
   useEffect(() => {
     const loadDatasetStats = async () => {
-      let stats = await fetchTrainingDatasetStats();
+      let stats = await fetchTrainingDatasetStats(model.model_id);
       setTrainingDatasetStats(stats);
-      stats = await fetchLiveDatasetStats();
+      stats = await fetchLiveDatasetStats(model.model_id);
       setLiveDatasetStats(stats)
     };
 
@@ -55,7 +55,7 @@ const DatasetInfo = ({model}) => {
 
     const loadMatrix = async () => {
       try {
-        const response = await fetch(`/data/${model}_Live_spearman_corr_matrix.json`);
+        const response = await fetch(`/data/${model.model_name}_Live_spearman_corr_matrix.json`);
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);
         };
@@ -70,7 +70,7 @@ const DatasetInfo = ({model}) => {
     loadMatrix();
     loadDatasetStats();
     loadFeatureVectors();
-  }, []);
+  }, [model?.model_id]);
 
   useEffect(() => {
     const calculateFVDistribution = () => {
@@ -184,7 +184,7 @@ const DatasetInfo = ({model}) => {
           </div>
         </div>
         <div className='data-info-body-column'>
-          {Object.keys(featureVectorDistribution).length > 0 ? (
+          {featureVectorDistribution ? (
             <div className='dataset-distribution-container'>
               <div className='dataset-distribution-header'>
                 <p>Live Feature Distribution</p>
@@ -212,7 +212,9 @@ const DatasetInfo = ({model}) => {
                 <p>{featureVectorDistribution?.[selectedFeature]?.median?.toFixed(4)}</p>
               </div>
               <p className='dataset-distribution-image-header'>Rolling Statistics for {selectedFeature}</p>
-              <img src={`/images/${model}_Live_rolling_stats_${selectedFeature}.png`}/>
+              {model ? (
+                <img src={`/images/${model.model_name}_Live_rolling_stats_${selectedFeature}.png`}/>
+              ) : (<></>)}
             </div>
           ) : (<></>)}
           <div className='data-insertion-container'>

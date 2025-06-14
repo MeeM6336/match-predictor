@@ -15,8 +15,26 @@
     padding: 2rem;
 }
 
+.nav-select-container {
+    margin-left: 10%;
+    margin-right: 10%;
+    display: flex;
+    flex-direction: column;
+    color: white;
+    font-size: 0.85rem;
+}
+
+.nav-select-container select {
+    margin-top: 0.5rem;
+    padding: 0.3rem;
+}
+
 .nav-overview-container img {
     width: 2rem;
+}
+
+.nav-links-container {
+    margin-top: 1rem;
 }
 
 .nav-overview-container p {

@@ -5,8 +5,29 @@ import settings_icon from '../assets/images/settings_icon.png'
 import dashboard_icon from '../assets/images/dashboard_icon.png'
 import predicitons_icon from '../assets/images/predictions_icon.png'
 import features_icon from '../assets/images/features_icon.png'
+import { fetchModels } from '../assets/util/matches';
 
-const Navigation = () => {
+const Navigation = ({onModelChange, onPageChange}) => {
+	const [models, setModels] = useState([]);
+
+	const selectModel = (event) => {
+		const selectedId = parseInt(event.target.value);
+		const selectedModel = models.find((model) => model.model_id === selectedId);
+    onModelChange(selectedModel);
+  };
+
+	const selectPage = (pageName) => {
+		onPageChange(pageName);
+	};
+
+	useEffect(() => {
+			const loadModels = async () => {
+				const models = await fetchModels();
+				setModels(models);
+			};
+	
+			loadModels();
+		}, []);
 
 	return (
 		<div className='Navigation'>
@@ -14,15 +35,25 @@ const Navigation = () => {
 				<img src={logo}/>
 				<p>FragForecast</p>    
 			</div>
+			{models.length > 1 ? (
+				<div className='nav-select-container'>
+					<p>Model Selection</p>
+					<select onChange={selectModel}>
+						{models.map((model) => (
+							<option key={model.model_id} value={model.model_id}>{model.model_name}</option>
+						))}
+					</select>
+				</div>
+			) : (<></>)}
 			<div className='nav-links-container'>
 				<ul className='nav-links'>
 					<li>
-							<button className='nav-links-button'>
+							<button className='nav-links-button' onClick={() => selectPage("Model Overview")}>
 								<img src={dashboard_icon}/>
 								Model Overview</button>
 					</li>
 					<li>
-							<button className='nav-links-button'>
+							<button className='nav-links-button' onClick={() => selectPage("Match Predictions")}>
 								<img src={predicitons_icon}/>
 								Match Predictions
 							</button>

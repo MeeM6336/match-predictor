@@ -1,4 +1,5 @@
 import torch.nn as nn
+import torch
 
 
 class MLP(nn.Module):
@@ -16,4 +17,5 @@ class MLP(nn.Module):
     self.model = nn.Sequential(*layers)
 
   def forward(self, x):
-    return self.model(x)
+    output = self.model(x)
+    return output

@@ -129,79 +129,128 @@ app.get('/livefeaturevectors', (req, res) => {
 
 
 // Route to get training dataset stats
-app.get('/trainingdatasetstats', (req, res) => {
+app.get('/trainingdatasetstats/:model_id', (req, res) => {
+  const model_id = decodeURIComponent(req.params.model_id)
   const matchCountQuery = `SELECT
     (SELECT COUNT(*) FROM cs2_data.matches) AS match_row_count,
     (SELECT MIN(date) FROM cs2_data.matches) as min_date,
     (SELECT MAX(date) FROM CS2_data.matches) as max_date
     `;
   const featureStatsQuery = `SELECT
-    (SELECT COUNT(*) FROM cs2_data.feature_vectors) AS feature_row_count,
-    (SELECT COUNT(*) FROM information_schema.columns 
-    WHERE table_schema = 'cs2_data' AND table_name = 'feature_vectors') AS feature_count
-  `;
+    (SELECT COUNT(*) FROM cs2_data.feature_vectors WHERE model_id = ?) AS feature_row_count`;
+  
+  const firstRowQuery = `SELECT * FROM cs2_data.feature_vectors WHERE model_id = ? LIMIT 1`
+
   db.query(matchCountQuery, (err, matchStatsResults) => {
     if (err) {
       console.error(err);
       return res.status(500).send("Server error");
     };
 
-    db.query(featureStatsQuery, (err, featureStatsResults) => {
+    db.query(featureStatsQuery, [model_id], (err, featureStatsResults) => {
       if (err) {
         console.error(err);
         return res.status(500).send("Server error");
       };
-      
-      res.json({
-        match_row_count: matchStatsResults[0].match_row_count,
-        match_min_date: matchStatsResults[0].min_date,
-        match_max_date: matchStatsResults[0].max_date,
-        feature_row_count: featureStatsResults[0].feature_row_count,
-        feature_count: featureStatsResults[0].feature_count
+
+      db.query(firstRowQuery, [model_id], (err, firstRowResults) => {
+        if (err) {
+          console.error(err);
+          return res.status(500).send("Server error");
+        };
+        const firstRow = firstRowResults[0]
+
+        let count = Object.keys(firstRow).reduce((count, key) => {
+          if (firstRow[key] !== null && firstRow[key] !== undefined) {
+            return count + 1;
+          }
+          return count;
+        }, 0);
+        
+        res.json({
+          match_row_count: matchStatsResults[0].match_row_count,
+          match_min_date: matchStatsResults[0].min_date,
+          match_max_date: matchStatsResults[0].max_date,
+          feature_row_count: featureStatsResults[0].feature_row_count,
+          feature_count: (count - 2)
+        });
       });
     });
   });
 });
 
 // Route to get live dataset stats
-app.get('/livedatasetstats', (req, res) => {
+app.get('/livedatasetstats/:model_id', (req, res) => {
+  const model_id = decodeURIComponent(req.params.model_id)
   const matchCountQuery = `SELECT
     (SELECT COUNT(*) FROM cs2_data.upcoming_matches) AS match_row_count,
     (SELECT MIN(date) FROM cs2_data.upcoming_matches) as min_date,
     (SELECT MAX(date) FROM CS2_data.upcoming_matches) as max_date
     `;
   const featureStatsQuery = `SELECT
-    (SELECT COUNT(*) FROM cs2_data.live_feature_vectors) AS feature_row_count,
-    (SELECT COUNT(*) FROM information_schema.columns 
-    WHERE table_schema = 'cs2_data' AND table_name = 'live_feature_vectors') AS feature_count
-  `;
+    (SELECT COUNT(*) FROM cs2_data.live_feature_vectors WHERE model_id = ?) AS feature_row_count`;
+  
+  const firstRowQuery = `SELECT * FROM cs2_data.live_feature_vectors WHERE model_id = ? LIMIT 1`
+
   db.query(matchCountQuery, (err, matchStatsResults) => {
     if (err) {
       console.error(err);
       return res.status(500).send("Server error");
     };
 
-    db.query(featureStatsQuery, (err, featureStatsResults) => {
+    db.query(featureStatsQuery, [model_id], (err, featureStatsResults) => {
       if (err) {
         console.error(err);
         return res.status(500).send("Server error");
       };
-      
-      res.json({
-        match_row_count: matchStatsResults[0].match_row_count,
-        match_min_date: matchStatsResults[0].min_date,
-        match_max_date: matchStatsResults[0].max_date,
-        feature_row_count: featureStatsResults[0].feature_row_count,
-        feature_count: featureStatsResults[0].feature_count
+
+      db.query(firstRowQuery, [model_id], (err, firstRowResults) => {
+        if (err) {
+          console.error(err);
+          return res.status(500).send("Server error");
+        };
+        const firstRow = firstRowResults[0]
+
+        let count = Object.keys(firstRow).reduce((count, key) => {
+          if (firstRow[key] !== null && firstRow[key] !== undefined) {
+            return count + 1;
+          }
+          return count;
+        }, 0);
+        
+        res.json({
+          match_row_count: matchStatsResults[0].match_row_count,
+          match_min_date: matchStatsResults[0].min_date,
+          match_max_date: matchStatsResults[0].max_date,
+          feature_row_count: featureStatsResults[0].feature_row_count,
+          feature_count: (count - 2)
+        });
       });
     });
   });
 });
 
 // Route to get recent matches
-app.get('/upcoming', (req, res) => {
-  const query = 'SELECT * FROM upcoming_matches ORDER BY date DESC'
-  db.query(query, (err, result) => {
+app.get('/upcoming/:model_id', (req, res) => {
+  const modelId = decodeURIComponent(req.params.model_id);
+  const query = `
+  SELECT 
+    um.match_id, 
+    um.team_a, 
+    um.team_b, 
+    um.date, 
+    um.tournament_name, 
+    um.tournament_type, 
+    um.best_of, 
+    um.actual_outcome, 
+    mp.prediction, 
+    mp.confidence, 
+    mp.model_id 
+  FROM upcoming_matches um 
+    LEFT JOIN match_predictions mp ON um.match_id = mp.match_id 
+    WHERE model_id = ? ORDER BY date DESC`
+
+  db.query(query, [modelId], (err, result) => {
     if (err) {
       console.error(err);
       return res.status(500).send("Server error");
@@ -212,9 +261,18 @@ app.get('/upcoming', (req, res) => {
 });
 
 // Route to get stats for recent matches
-app.get('/upcomingstats', (req, res) => {
-  const query = 'SELECT outcome, actual_outcome, confidence FROM upcoming_matches WHERE outcome IS NOT NULL and actual_outcome IS NOT NULL'
-  db.query(query, (err, result) => {
+app.get('/upcomingstats/:model_id', (req, res) => {
+  const model_id = decodeURIComponent(req.params.model_id)
+  const query = `
+  SELECT 
+    mp.prediction, 
+    um.actual_outcome, 
+    mp.confidence 
+  FROM upcoming_matches um 
+    JOIN match_predictions mp ON um.match_id = mp.match_id 
+    WHERE um.actual_outcome IS NOT NULL AND mp.model_id = ?`
+    
+  db.query(query, [model_id], (err, result) => {
     if (err) {
       console.error(err);
       return res.status(500).send("Server error");
@@ -227,4 +285,17 @@ app.get('/upcomingstats', (req, res) => {
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`Server is running on http://localhost:${PORT}`);
+});
+
+// Route to get models
+app.get('/models', (req, res) => {
+  const query = 'SELECT model_name, model_id FROM model'
+  db.query(query, (err, result) => {
+    if (err) {
+      console.error(err);
+      return res.status(500).send("Server error");
+    } else {
+      return res.json(result);
+    }
+  });
 });

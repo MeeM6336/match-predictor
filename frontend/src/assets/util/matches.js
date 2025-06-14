@@ -1,8 +1,8 @@
 import axios from 'axios'
 
-export const fetchUpcomingMatches =  async() => {
+export const fetchUpcomingMatches =  async(modelId) => {
     try {
-      const response = await axios.get('http://localhost:3000/upcoming');
+      const response = await axios.get(`http://localhost:3000/upcoming/${modelId}`);
       return response.data;
     } catch(err) {
       console.log('Error getting upcoming matches: ', err.message);
@@ -10,12 +10,12 @@ export const fetchUpcomingMatches =  async() => {
     };
 };
 
-export const fetchMatchPredictionStats = async() => {
+export const fetchMatchPredictionStats = async(modelId) => {
     try {
-      const response = await axios.get('http://localhost:3000/upcomingstats');
+      const response = await axios.get(`http://localhost:3000/upcomingstats/${modelId}`);
       return response.data;
     } catch(err) {
-      console.log('Error getting match predicition stats: ', err.message);
+      console.log('Error getting match prediction stats: ', err.message);
       return [];
     };
 };
@@ -40,9 +40,9 @@ export const fetchFeatureVectors = async () => {
   };
 }
 
-export const fetchTrainingDatasetStats = async () => {
+export const fetchTrainingDatasetStats = async (model_id) => {
   try {
-    const response = await axios.get('http://localhost:3000/trainingdatasetstats');
+    const response = await axios.get(`http://localhost:3000/trainingdatasetstats/${model_id}`);
     return response.data;
   } catch(err) {
     console.log('Error getting training dataset stats: ', err.message);
@@ -50,9 +50,9 @@ export const fetchTrainingDatasetStats = async () => {
   };
 };
 
-export const fetchLiveDatasetStats = async () => {
+export const fetchLiveDatasetStats = async (model_id) => {
   try {
-    const response = await axios.get('http://localhost:3000/livedatasetstats');
+    const response = await axios.get(`http://localhost:3000/livedatasetstats/${model_id}`);
     return response.data;
   } catch(err) {
     console.log('Error getting live dataset stats: ', err.message);
@@ -60,38 +60,12 @@ export const fetchLiveDatasetStats = async () => {
   };
 };
 
-export function computeRocAuc(y_true, y_prob) {
-  const data = y_true.map((label, idx) => ({ label, prob: y_prob[idx] }));
-
-  data.sort((a, b) => b.prob - a.prob);
-
-  let tp = 0;
-  let fp = 0;
-  const tps = [];
-  const fps = [];
-
-  const P = y_true.filter(y => y === 1).length;
-  const N = y_true.filter(y => y === 0).length;
-
-  for (const point of data) {
-    if (point.label === 1) {
-      tp++;
-    } else {
-      fp++;
-    }
-    tps.push(tp);
-    fps.push(fp);
+export const fetchModels = async () => {
+  try {
+    const response = await axios.get('http://localhost:3000/models');
+    return response.data;
+  } catch(err) {
+    console.log('Error model id/name: ', err.message);
+      return [];
   };
-
-  const tpr = tps.map(v => v / P);
-  const fpr = fps.map(v => v / N);
-
-  let auc = 0;
-  for (let i = 1; i < tpr.length; i++) {
-    const width = fpr[i] - fpr[i - 1];
-    const height = (tpr[i] + tpr[i - 1]) / 2;
-    auc += width * height;
-  };
-
-  return auc;
 };
