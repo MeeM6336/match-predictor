@@ -5,10 +5,8 @@ import settings_icon from '../assets/images/settings_icon.png'
 import dashboard_icon from '../assets/images/dashboard_icon.png'
 import predicitons_icon from '../assets/images/predictions_icon.png'
 import features_icon from '../assets/images/features_icon.png'
-import { fetchModels } from '../assets/util/matches';
 
-const Navigation = ({onModelChange, onPageChange}) => {
-	const [models, setModels] = useState([]);
+const Navigation = ({onModelChange, onPageChange, models}) => {
 
 	const selectModel = (event) => {
 		const selectedId = parseInt(event.target.value);
@@ -19,15 +17,6 @@ const Navigation = ({onModelChange, onPageChange}) => {
 	const selectPage = (pageName) => {
 		onPageChange(pageName);
 	};
-
-	useEffect(() => {
-			const loadModels = async () => {
-				const models = await fetchModels();
-				setModels(models);
-			};
-	
-			loadModels();
-		}, []);
 
 	return (
 		<div className='Navigation'>

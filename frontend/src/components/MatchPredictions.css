@@ -1,4 +1,13 @@
 .full-prediction-table-container {
-  max-height: 50vh;
+  max-height: 70vh;
   overflow-y: scroll;
+}
+
+.match-predictions-header {
+  display: flex;
+  flex-direction: row;
+}
+
+.search-bar-button img {
+  width: 1rem;
 }

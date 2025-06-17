@@ -65,9 +65,9 @@ const RecentPredictions = ({model, onPageChange}) => {
 									<td>{match.best_of}</td>
 									<td>{match.tournament_type}</td>
 									<td>{match.tournament_name}</td>
-									<td>{match.prediction != null ? match.prediction : "N/A"}</td>
+									<td>{match.prediction != null ? (match.prediction === 1 ? (match.team_a) : (match.team_b)) : "N/A"}</td>
 									<td>{match.confidence ? match.confidence.toFixed(3) : "N/A"}</td>
-									<td>{match.actual_outcome != null ? match.actual_outcome : "N/A"}</td>
+									<td>{match.actual_outcome != null ? (match.actual_outcome === 1 ? (match.team_a) : (match.team_b)) : "N/A"}</td>
 								</tr>) : (<></>)
 							))}
 					</tbody>

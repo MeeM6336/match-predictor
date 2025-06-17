@@ -4,11 +4,13 @@ import RecentPredictions from '../components/RecentPredictions';
 import ModelPerformance from '../components/ModelPerformance';
 import DatasetInfo from '../components/DatasetInfo';
 import MatchPredictions from '../components/MatchPredictions';
+import { fetchModels } from '../assets/util/matches';
 import './Home.css'
 
 const Home = () => {
 	const [pageName, setPageName] = useState("Model Overview")
 	const [selectedModel, setSelectedModel] = useState({model_name: "logistic_regression", model_id: 1})
+	const [models, setModels] = useState([]);
 
 	const handleModelChange = (newModel) => {
     setSelectedModel(newModel);
@@ -17,6 +19,15 @@ const Home = () => {
 	const handlePageChange = (newPage) => {
 		setPageName(newPage)
 	};
+
+	useEffect(() => {
+		const loadModels = async () => {
+			const models = await fetchModels();
+			setModels(models);
+		};
+
+		loadModels();
+	}, []);
 
 	const renderPage = () => {
 		if(pageName === "Model Overview") {
@@ -39,7 +50,7 @@ const Home = () => {
 
 	return (
 		<div className='Home'>
-			<Navigation onModelChange={handleModelChange} onPageChange={handlePageChange}/>
+			<Navigation onModelChange={handleModelChange} onPageChange={handlePageChange} models={models}/>
 			<div className='home-container'>
 				{renderPage()}
 			</div>

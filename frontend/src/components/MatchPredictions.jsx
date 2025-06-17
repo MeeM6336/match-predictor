@@ -1,9 +1,15 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { fetchUpcomingMatches } from '../assets/util/matches';
 import './MatchPredictions.css'
 
 const MatchPredictions = ({model}) => {
   const [upcomingMatchList, setUpcomingMatchList] = useState([]);
+	const [filterType, setFilterType] = useState(1)
+	const [searchQuery, setSearchQuery] = useState('');
+
+	const selectFilter = (event) => {
+    setFilterType(event.target.value);
+  };
 
   const getDate = (dateString) => {
       const date = new Date(dateString);
@@ -21,17 +27,47 @@ const MatchPredictions = ({model}) => {
       return localString
     };
   
-    useEffect(() => {
-      const loadMatches = async () => {
-        const matches = await fetchUpcomingMatches(model.model_id);
-        setUpcomingMatchList(matches);
-      };
-  
-      loadMatches();
-    }, [model?.model_id]);
+	useEffect(() => {
+		const loadMatches = async () => {
+			const matches = await fetchUpcomingMatches(model.model_id);
+			const filteredMatches = matches.filter(match => match.tournament_type >= filterType);
+
+			setUpcomingMatchList(filteredMatches);
+		};
+
+		loadMatches();
+	}, [model?.model_id, filterType]);
+
+	const finalFilteredMatches = useMemo(() => {
+    if (!searchQuery) {
+      return upcomingMatchList;
+    }
+
+    const lowerCaseSearchQuery = searchQuery.toLowerCase();
+
+    return upcomingMatchList.filter(match =>
+      match.team_a.toLowerCase().includes(lowerCaseSearchQuery) ||
+      match.team_b.toLowerCase().includes(lowerCaseSearchQuery)
+    );
+  }, [upcomingMatchList, searchQuery]);
+
 
   return (
     <div className='MatchPredictions'>
+			<div className='match-predictions-header'>
+				<input
+          type='text'
+          className='search-bar'
+          placeholder='Search items...'
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+        />
+				<select value={filterType} onChange={selectFilter}>
+					<option value={1}>All</option>
+					<option value={3}>Big Matches</option>
+					<option value={4}>Majors</option>
+				</select>
+			</div>
       <div className='full-prediction-table-container'>
 				<table className='prediction-table'>
 					<thead>
@@ -48,18 +84,18 @@ const MatchPredictions = ({model}) => {
 						</tr>
 					</thead>
 					<tbody className='prediction-table-body'>
-						{upcomingMatchList.map((match, index) => (
+						{finalFilteredMatches.map((match, index) => (
 							match.model_id === model.model_id || match.model_id === null ? (
-								<tr key={index}>
+								<tr key={match.match_id}>
 									<td className={`prediction-table-team ${match.actual_outcome != null ? match.actual_outcome == 1 ? "winner" : "loser" : ""}`}>{match.team_a}</td>
 									<td className={`prediction-table-team ${match.actual_outcome != null ? match.actual_outcome == 0 ? "winner" : "loser" : ""}`}>{match.team_b}</td>
 									<td className='prediction-table-team'>{getDate(match.date)}</td>
 									<td>{match.best_of}</td>
 									<td>{match.tournament_type}</td>
 									<td>{match.tournament_name}</td>
-									<td>{match.prediction != null ? match.prediction : "N/A"}</td>
+									<td>{match.prediction != null ? (match.prediction === 1 ? (match.team_a) : (match.team_b)) : "N/A"}</td>
 									<td>{match.confidence ? match.confidence.toFixed(3) : "N/A"}</td>
-									<td>{match.actual_outcome != null ? match.actual_outcome : "N/A"}</td>
+									<td>{match.actual_outcome != null ? (match.actual_outcome === 1 ? (match.team_a) : (match.team_b)) : "N/A"}</td>
 								</tr>) : (<></>)
 							))}
 					</tbody>
