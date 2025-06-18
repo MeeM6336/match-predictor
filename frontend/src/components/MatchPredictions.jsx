@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { fetchUpcomingMatches } from '../assets/util/matches';
+import { fetchUpcomingMatches, fetchMatchPredictionStats } from '../assets/util/matches';
 import './MatchPredictions.css'
 
 const MatchPredictions = ({model}) => {
@@ -26,6 +26,13 @@ const MatchPredictions = ({model}) => {
   
       return localString
     };
+	
+	const renderMetric = (value, name) => (
+    <div className='performance-metric'>
+      <p className='performance-metric-number'>{typeof value === 'number' ? value.toFixed(4) : 'N/A'}</p>
+      <p className='performance-metric-name'>{name}</p>
+    </div>
+  );
   
 	useEffect(() => {
 		const loadMatches = async () => {
@@ -51,10 +58,45 @@ const MatchPredictions = ({model}) => {
     );
   }, [upcomingMatchList, searchQuery]);
 
+	const matchMetrics = useMemo(() => {
+		let t_neg = 0, t_pos = 0, f_neg = 0, f_pos = 0;
+		const y_true = [];
+		const y_prob = [];
+
+		finalFilteredMatches.forEach(match => {
+			const { actual_outcome, prediction, confidence } = match;
+			if (actual_outcome != null && prediction != null && confidence != null) {
+				y_true.push(actual_outcome);
+				y_prob.push(confidence);
+
+				if (prediction === 1 && actual_outcome === 1) t_pos++;
+				else if (prediction === 1 && actual_outcome === 0) f_pos++;
+				else if (prediction === 0 && actual_outcome === 0) t_neg++;
+				else if (prediction === 0 && actual_outcome === 1) f_neg++;
+			}
+		});
+
+		const total = t_pos + t_neg + f_pos + f_neg;
+
+    const accuracy = total > 0 ? (t_pos + t_neg) / total : 0;
+    const precision = (t_pos + f_pos) > 0 ? t_pos / (t_pos + f_pos) : 0;
+    const recall = (t_pos + f_neg) > 0 ? t_pos / (t_pos + f_neg) : 0;
+    const f1 = (precision + recall) > 0 ? (2 * precision * recall) / (precision + recall) : 0;
+
+		return({ "accuracy": accuracy, "f1": f1 });
+	}, [finalFilteredMatches])
+
 
   return (
     <div className='MatchPredictions'>
 			<div className='match-predictions-header'>
+				<p className='match-prediction-title'>All Match Predictions</p>
+				<div className='metrics-container'>
+						{renderMetric(matchMetrics.accuracy, 'Accuracy')}
+						{renderMetric(matchMetrics.f1, 'F1-Score')}
+					</div>
+			</div>
+			<div className='match-predictions-nav'>
 				<input
           type='text'
           className='search-bar'

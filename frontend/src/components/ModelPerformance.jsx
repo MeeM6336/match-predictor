@@ -86,10 +86,9 @@ const ModelPerformance = ({ model }) => {
     if (!metricsData) return null;
 
     const { t_pos = 0, t_neg = 0, f_pos = 0, f_neg = 0, loss = 0, roc_auc = 0 } = metricsData;
-    const totalPopulation = t_pos + t_neg + f_pos + f_neg;
+    const total = t_pos + t_neg + f_pos + f_neg;
 
-    // FIX: Handle division by zero by defaulting to 0.
-    const accuracy = totalPopulation > 0 ? (t_pos + t_neg) / totalPopulation : 0;
+    const accuracy = total > 0 ? (t_pos + t_neg) / total : 0;
     const precision = (t_pos + f_pos) > 0 ? t_pos / (t_pos + f_pos) : 0;
     const recall = (t_pos + f_neg) > 0 ? t_pos / (t_pos + f_neg) : 0;
     const f1 = (precision + recall) > 0 ? (2 * precision * recall) / (precision + recall) : 0;

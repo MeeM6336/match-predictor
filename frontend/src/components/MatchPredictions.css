@@ -1,13 +1,33 @@
-.full-prediction-table-container {
-  max-height: 70vh;
-  overflow-y: scroll;
+.MatchPredictions {
+  padding-left: 1rem;
+  padding-right: 1rem;
 }
 
 .match-predictions-header {
   display: flex;
   flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  min-width: 100%;
 }
 
-.search-bar-button img {
-  width: 1rem;
+.match-prediction-title {
+  font-size: 1.66rem;
+}
+
+.match-predictions-nav {
+  display: flex;
+  flex-direction: row;
+  padding-bottom: 1rem;
+}
+
+.metrics-container {
+  display: flex;
+  flex-direction: row;
+  gap: 1rem;
+}
+
+.full-prediction-table-container {
+  max-height: 84.5vh;
+  overflow-y: scroll;
 }

@@ -54,7 +54,6 @@ router.get('/trainingdatasetstats/:model_id', (req, res) => {
 
   const firstRowQuery = `SELECT * FROM cs2_data.feature_vectors WHERE model_id = ? LIMIT 1`;
 
-  // Use Promise.all for parallel queries and better error handling
   Promise.all([
     new Promise((resolve, reject) => db.query(matchCountQuery, (err, res) => err ? reject(err) : resolve(res))),
     new Promise((resolve, reject) => db.query(featureStatsQuery, [model_id], (err, res) => err ? reject(err) : resolve(res))),
@@ -65,7 +64,6 @@ router.get('/trainingdatasetstats/:model_id', (req, res) => {
     let count = 0;
     if (firstRow) {
       count = Object.keys(firstRow).reduce((acc, key) => {
-        // Exclude 'id' and 'model_id' columns from the feature count if they are not features
         if (key !== 'id' && key !== 'model_id' && firstRow[key] !== null && firstRow[key] !== undefined) {
           return acc + 1;
         }
