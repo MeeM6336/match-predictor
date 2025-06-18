@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import './DatasetInfo.css';
 import { fetchTrainingDatasetStats, fetchLiveDatasetStats, fetchFeatureVectors} from '../assets/util/matches.js'
 
@@ -6,7 +6,6 @@ const DatasetInfo = ({model}) => {
   const [trainingDatasetStats, setTrainingDatasetStats] = useState({});
   const [liveDatasetStats, setLiveDatasetStats] = useState({});
   const [featureVectors, setFeatureVectors] = useState([]);
-  const [featureVectorDistribution, setFeatureVectorDistribution] = useState({});
   const [selectedFeature, setSelectedFeature] = useState("ADR_diff");
   const [correlationMatrix, setCorrelationMatrix] = useState({});
 
@@ -49,7 +48,7 @@ const DatasetInfo = ({model}) => {
     };
 
     const loadFeatureVectors = async () => {
-      const fvArray = await fetchFeatureVectors();
+      const fvArray = await fetchFeatureVectors(model.model_id);
       setFeatureVectors(fvArray);
     };
 
@@ -72,31 +71,28 @@ const DatasetInfo = ({model}) => {
     loadFeatureVectors();
   }, [model?.model_id]);
 
-  useEffect(() => {
-    const calculateFVDistribution = () => {
-      if (!featureVectors.length) return {};
+  const computedDistribution = useMemo(() => {
+    if (!featureVectors || featureVectors.length == 0) 
+      return {};
 
-      const keys = Object.keys(featureVectors[0]);
-      const stats = {};
-      for (const key of keys) {
-        const values = featureVectors.map(d => d[key]);
-        const mean = values.reduce((a, b) => a + b, 0) / values.length;
+    const keys = Object.keys(featureVectors[0]);
+    const stats = {};
 
-        const variance = values.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / values.length;
-        const sd = Math.sqrt(variance);
+    for (const key of keys) {
+      const values = featureVectors.map(d => d[key]);
 
-        const sorted = [...values].sort((a, b) => a - b);
-        const mid = Math.floor(sorted.length / 2);
-        const median = sorted.length % 2 === 0
-          ? (sorted[mid - 1] + sorted[mid]) / 2
-          : sorted[mid];
-        stats[key] = { mean, sd, median };
-      };
+      const mean = values.reduce((a, b) => a + b, 0) / values.length;
+      const variance = values.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / values.length;
+      const sd = Math.sqrt(variance);
 
-      setFeatureVectorDistribution(stats);
+      const sorted = [...values].sort((a, b) => a - b);
+      const mid = Math.floor(sorted.length / 2);
+      const median = sorted.length % 2 === 0
+        ? (sorted[mid - 1] + sorted[mid]) / 2
+        : sorted[mid];
+      stats[key] = { mean, sd, median };
     };
-
-    calculateFVDistribution();
+    return stats;
   }, [featureVectors]);
 
   return (
@@ -184,39 +180,37 @@ const DatasetInfo = ({model}) => {
           </div>
         </div>
         <div className='data-info-body-column'>
-          {featureVectorDistribution ? (
-            <div className='dataset-distribution-container'>
-              <div className='dataset-distribution-header'>
-                <p>Live Feature Distribution</p>
-                <select className='dataset-distribution-select' value={selectedFeature} onChange={selectFeature}>
-                  <option value="ADR_diff">ADR_diff</option>
-                  <option value="KAST_diff">KAST_diff</option>
-                  <option value="KDA_diff">KDA_diff</option>
-                  <option value="best_of">best_of</option>
-                  <option value="hth_wins_diff">hth_wins_diff</option>
-                  <option value="ranking_diff">ranking_diff</option>
-                  <option value="rating_diff">rating_diff</option>
-                  <option value="tournament_type">tournament_type</option>
-                </select>
-              </div>
-              <div className='dataset-overview-item'>
-                <p className='dataset-overview-type'>Mean:</p>
-                <p>{featureVectorDistribution?.[selectedFeature]?.mean?.toFixed(4)}</p>
-              </div>
-              <div className='dataset-overview-item'>
-                <p className='dataset-overview-type'>Standard Deviation:</p>
-                <p>{featureVectorDistribution?.[selectedFeature]?.sd?.toFixed(4)}</p>
-              </div>
-              <div className='dataset-overview-item'>
-                <p className='dataset-overview-type'>Median:</p>
-                <p>{featureVectorDistribution?.[selectedFeature]?.median?.toFixed(4)}</p>
-              </div>
-              <p className='dataset-distribution-image-header'>Rolling Statistics for {selectedFeature}</p>
-              {model ? (
-                <img src={`/images/${model.model_name}_Live_rolling_stats_${selectedFeature}.png`}/>
-              ) : (<></>)}
+          <div className='dataset-distribution-container'>
+            <div className='dataset-distribution-header'>
+              <p>Live Feature Distribution</p>
+              <select className='dataset-distribution-select' value={selectedFeature} onChange={selectFeature}>
+                <option value="ADR_diff">ADR_diff</option>
+                <option value="KAST_diff">KAST_diff</option>
+                <option value="KDA_diff">KDA_diff</option>
+                <option value="best_of">best_of</option>
+                <option value="hth_wins_diff">hth_wins_diff</option>
+                <option value="ranking_diff">ranking_diff</option>
+                <option value="rating_diff">rating_diff</option>
+                <option value="tournament_type">tournament_type</option>
+              </select>
             </div>
-          ) : (<></>)}
+            <div className='dataset-overview-item'>
+              <p className='dataset-overview-type'>Mean:</p>
+              <p>{computedDistribution?.[selectedFeature]?.mean?.toFixed(4)}</p>
+            </div>
+            <div className='dataset-overview-item'>
+              <p className='dataset-overview-type'>Standard Deviation:</p>
+              <p>{computedDistribution?.[selectedFeature]?.sd?.toFixed(4)}</p>
+            </div>
+            <div className='dataset-overview-item'>
+              <p className='dataset-overview-type'>Median:</p>
+              <p>{computedDistribution?.[selectedFeature]?.median?.toFixed(4)}</p>
+            </div>
+            <p className='dataset-distribution-image-header'>Rolling Statistics for {selectedFeature}</p>
+            {model ? (
+              <img src={`/images/${model.model_name}_Live_rolling_stats_${selectedFeature}.png`}/>
+            ) : (<></>)}
+          </div>
           <div className='data-insertion-container'>
             <p>Live Matches Insertion by Day</p>
             <img src='/images/Live_match_insertions.png'/>

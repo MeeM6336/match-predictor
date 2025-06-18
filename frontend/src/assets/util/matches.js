@@ -30,9 +30,9 @@ export const fetchModelMetrics = async (modelName) => {
     };
 };
 
-export const fetchFeatureVectors = async () => {
+export const fetchFeatureVectors = async (model_id) => {
   try {
-    const response = await axios.get("http://localhost:3000/livefeaturevectors");
+    const response = await axios.get(`http://localhost:3000/livefeaturevectors/${model_id}`);
     return response.data;
   } catch(err) {
     console.log('Error feature vectors: ', err.message);

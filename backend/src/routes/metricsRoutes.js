@@ -19,9 +19,10 @@ router.get('/metrics/:name', (req, res) => {
 });
 
 // Route to get all of dataset's feature vectors
-router.get('/livefeaturevectors', (req, res) => {
-  const query = `SELECT * FROM live_feature_vectors`;
-  db.query(query, (err, result) => {
+router.get('/livefeaturevectors/:model_id', (req, res) => {
+  const model_id = decodeURIComponent(req.params.model_id);
+  const query = `SELECT * FROM live_feature_vectors WHERE model_id = ?`;
+  db.query(query, [model_id], (err, result) => {
     if (err) {
       logger.error({ requestId: req.id, error: err.message, stack: err.stack }, 'Error fetching live feature vectors');
       return res.status(500).send("Server error");
