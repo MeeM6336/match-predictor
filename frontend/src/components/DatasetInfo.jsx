@@ -79,13 +79,17 @@ const DatasetInfo = ({model}) => {
     const stats = {};
 
     for (const key of keys) {
-      const values = featureVectors.map(d => d[key]);
+      const numericValues = featureVectors.map(fv => fv[key]).filter(val => typeof val === 'number' && val != null && !isNaN(val));
 
-      const mean = values.reduce((a, b) => a + b, 0) / values.length;
-      const variance = values.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / values.length;
+      if (numericValues.length === 0) {
+        continue;
+    }
+
+      const mean = numericValues.reduce((a, b) => a + b, 0) / numericValues.length;
+      const variance = numericValues.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / numericValues.length;
       const sd = Math.sqrt(variance);
 
-      const sorted = [...values].sort((a, b) => a - b);
+      const sorted = [...numericValues].sort((a, b) => a - b);
       const mid = Math.floor(sorted.length / 2);
       const median = sorted.length % 2 === 0
         ? (sorted[mid - 1] + sorted[mid]) / 2
@@ -184,14 +188,13 @@ const DatasetInfo = ({model}) => {
             <div className='dataset-distribution-header'>
               <p>Live Feature Distribution</p>
               <select className='dataset-distribution-select' value={selectedFeature} onChange={selectFeature}>
-                <option value="ADR_diff">ADR_diff</option>
-                <option value="KAST_diff">KAST_diff</option>
-                <option value="KDA_diff">KDA_diff</option>
-                <option value="best_of">best_of</option>
-                <option value="hth_wins_diff">hth_wins_diff</option>
-                <option value="ranking_diff">ranking_diff</option>
-                <option value="rating_diff">rating_diff</option>
-                <option value="tournament_type">tournament_type</option>
+                {Object.keys(computedDistribution).map(feature => {
+                  if (computedDistribution[feature] != 0) {
+                    return <option value={feature}>{feature}</option>
+                  }
+                  return null;
+                }
+                )}
               </select>
             </div>
             <div className='dataset-overview-item'>
