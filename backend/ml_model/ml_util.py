@@ -534,22 +534,74 @@ def create_rolling_accuracy_graph(y_pred, y_true, model_name, stage):
 def create_rolling_feature_metrics(model_name, model_id, stage):
 	db = db_connect()
 	cursor = db.cursor(dictionary=True)
+
+
 	try:
-		query = """
-			SELECT 
-				live_feature_vectors.tournament_type, 
-				live_feature_vectors.best_of, 
-				live_feature_vectors.ranking_diff, 
-				live_feature_vectors.hth_wins_diff, 
-				live_feature_vectors.rating_diff, 
-				live_feature_vectors.KDA_diff, 
-				live_feature_vectors.KAST_diff, 
-				live_feature_vectors.ADR_diff,
-				upcoming_matches.date
-			FROM live_feature_vectors JOIN upcoming_matches ON live_feature_vectors.match_id=upcoming_matches.match_id WHERE model_id=%s
-			ORDER BY 
-				upcoming_matches.date DESC
-		"""
+		if model_id == 2:
+			numerical_features = [
+				"tournament_type",
+				"best_of",
+				"ranking_diff",
+				"hth_wins_diff",
+				"rating_diff",
+				"KDA_diff",
+				"KAST_diff",
+				"ADR_diff",
+				"round_wr_diff",
+				"opening_kill_rate_diff",
+				"multikill_rate_diff",
+				"5v4_wr_diff",
+				"4v5_wr_diff",
+				"trade_rate_diff",
+				"utility_adr_diff",
+				"flash_assists_diff",
+				"pistol_wr_diff",
+				"round2_conv_diff",
+				"round2_break_diff"
+			]
+			query = """
+				SELECT 
+					live_feature_vectors.tournament_type, 
+					live_feature_vectors.best_of, 
+					live_feature_vectors.ranking_diff, 
+					live_feature_vectors.hth_wins_diff, 
+					live_feature_vectors.rating_diff, 
+					live_feature_vectors.KDA_diff, 
+					live_feature_vectors.KAST_diff, 
+					live_feature_vectors.ADR_diff,
+					live_feature_vectors.round_wr_diff,
+					live_feature_vectors.opening_kill_rate_diff,
+					live_feature_vectors.multikill_rate_diff,
+					live_feature_vectors.5v4_wr_diff,
+					live_feature_vectors.4v5_wr_diff,
+					live_feature_vectors.trade_rate_diff,
+					live_feature_vectors.utility_adr_diff,
+					live_feature_vectors.flash_assists_diff,
+					live_feature_vectors.pistol_wr_diff, 
+					live_feature_vectors.round2_conv_diff,
+					live_feature_vectors.round2_break_diff,
+					upcoming_matches.date
+				FROM live_feature_vectors JOIN upcoming_matches ON live_feature_vectors.match_id=upcoming_matches.match_id WHERE model_id=%s
+				ORDER BY 
+					upcoming_matches.date DESC
+			"""
+		else:
+			numerical_features = ['tournament_type', 'best_of', 'ranking_diff', 'hth_wins_diff', 'rating_diff', 'KDA_diff', 'KAST_diff', 'ADR_diff']
+			query = """
+				SELECT 
+					live_feature_vectors.tournament_type, 
+					live_feature_vectors.best_of, 
+					live_feature_vectors.ranking_diff, 
+					live_feature_vectors.hth_wins_diff, 
+					live_feature_vectors.rating_diff, 
+					live_feature_vectors.KDA_diff, 
+					live_feature_vectors.KAST_diff, 
+					live_feature_vectors.ADR_diff,
+					upcoming_matches.date
+				FROM live_feature_vectors JOIN upcoming_matches ON live_feature_vectors.match_id=upcoming_matches.match_id WHERE model_id=%s
+				ORDER BY 
+					upcoming_matches.date DESC
+			"""
 
 		cursor.execute(query, (model_id,))
 		features = cursor.fetchall()
@@ -564,7 +616,6 @@ def create_rolling_feature_metrics(model_name, model_id, stage):
 	df = df.sort_index()
 	
 	rolling_window = '15D'
-	numerical_features = ['tournament_type', 'best_of', 'ranking_diff', 'hth_wins_diff', 'rating_diff', 'KDA_diff', 'KAST_diff', 'ADR_diff']
 
 	for feature in numerical_features:
 		plt.figure(figsize=(12, 6))
