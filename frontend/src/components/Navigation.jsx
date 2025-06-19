@@ -49,11 +49,6 @@ const Navigation = ({onModelChange, onPageChange, models}) => {
 					</li>
 					<li>
 							<button className='nav-links-button'>
-								<img src={features_icon}/>
-								Feature Insights</button>
-					</li>
-					<li>
-							<button className='nav-links-button'>
 									<img src={settings_icon}/>
 									Settings
 							</button>

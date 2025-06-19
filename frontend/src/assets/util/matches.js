@@ -10,7 +10,7 @@ export const fetchUpcomingMatches =  async(modelId) => {
     };
 };
 
-export const fetchMatchPredictionStats = async(modelId) => {
+export const fetchMatchPredictions = async(modelId) => {
     try {
       const response = await axios.get(`http://localhost:3000/upcomingstats/${modelId}`);
       return response.data;

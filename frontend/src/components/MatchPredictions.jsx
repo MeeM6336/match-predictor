@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { fetchUpcomingMatches, fetchMatchPredictionStats } from '../assets/util/matches';
+import { fetchUpcomingMatches, fetchMatchPredictions } from '../assets/util/matches';
 import './MatchPredictions.css'
 
 const MatchPredictions = ({model}) => {
@@ -126,7 +126,7 @@ const MatchPredictions = ({model}) => {
 						</tr>
 					</thead>
 					<tbody className='prediction-table-body'>
-						{finalFilteredMatches.map((match, index) => (
+						{finalFilteredMatches.map((match) => (
 							match.model_id === model.model_id || match.model_id === null ? (
 								<tr key={match.match_id}>
 									<td className={`prediction-table-team ${match.actual_outcome != null ? match.actual_outcome == 1 ? "winner" : "loser" : ""}`}>{match.team_a}</td>
